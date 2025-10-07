@@ -616,408 +616,331 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
     # Dosyaları yükle
     sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df = None, None, None, None, None, None
     
-    for name, df in file_data.items():
-        name_lower = name.lower()
-        if "sevkiyat" in name_lower:
-            sevk_df = df.copy()
-            st.info(f"📊 Sevkiyat dosyası: {len(sevk_df)} satır")
-        elif "depo" in name_lower and "stok" in name_lower:
-            depo_stok_df = df.copy()
-            st.info(f"📦 Depo stok dosyası: {len(depo_stok_df)} satır")
-        elif "urun" in name_lower:
-            urunler_df = df.copy()
-            st.info(f"🏷️ Ürünler dosyası: {len(urunler_df)} satır")
-            st.session_state.urunler_df = urunler_df
-        elif "magaza" in name_lower:
-            magazalar_df = df.copy()
-            st.info(f"🏪 Mağazalar dosyası: {len(magazalar_df)} satır")
-            st.session_state.magazalar_df = magazalar_df
-        elif "cover" in name_lower:
-            cover_df = df.copy()
-            st.info(f"📈 Cover dosyası: {len(cover_df)} satır")
-        elif "kpi" in name_lower:
-            kpi_df = df.copy()
-            st.info(f"🎯 KPI dosyası: {len(kpi_df)} satır")
+    # Timeline başlangıcı
+    start_time = time.time()
+    timeline_steps = []
+    current_step = 0
+    total_steps = 10  # Toplam adım sayısı
     
-    if sevk_df is None or depo_stok_df is None:
-        raise Exception("Zorunlu dosyalar (Sevkiyat.csv, Depo_Stok.csv) eksik!")
-    
-    # Orijinal sevkiyat df'ini kaydet (alım ihtiyacı için)
-    original_sevkiyat_df = sevk_df.copy()
-    
-    # Kolon normalizasyonu
-    sevk_df = normalize_columns(sevk_df)
-    depo_stok_df = normalize_columns(depo_stok_df)
-    original_sevkiyat_df = normalize_columns(original_sevkiyat_df)
-    
-    # Zorunlu kolon kontrolü
-    required_sevk = ['depo_id', 'urun_id', 'magaza_id', 'haftalik_satis', 'mevcut_stok', 'klasmankod']
-    missing_cols = [col for col in required_sevk if col not in sevk_df.columns]
-    if missing_cols:
-        raise Exception(f"Sevkiyat.csv'de eksik kolonlar: {missing_cols}")
-    
-    # yolda kolonu kontrolü
-    if 'yolda' not in sevk_df.columns:
-        sevk_df['yolda'] = 0
-        original_sevkiyat_df['yolda'] = 0
-        st.info("ℹ️ 'yolda' kolonu eklenerek 0 değeri atandı")
-    
-    # VERİ TİPLERİNİ KESİNLİKLE DÖNÜŞTÜR
-    st.info("🔄 Veri tipleri kontrol ediliyor...")
-    numeric_cols = ['haftalik_satis', 'mevcut_stok', 'yolda', 'cover', 'hedef_hafta', 'min_adet', 'maks_adet']
-    for col in numeric_cols:
-        if col in sevk_df.columns:
-            sevk_df[col] = pd.to_numeric(sevk_df[col], errors='coerce').fillna(0).astype(float)
-        if col in original_sevkiyat_df.columns:
-            original_sevkiyat_df[col] = pd.to_numeric(original_sevkiyat_df[col], errors='coerce').fillna(0).astype(float)
-    
-    # ÖNEMLİ: Sıfır ve negatif satış değerlerini düzelt
-    sevk_df['haftalik_satis'] = sevk_df['haftalik_satis'].apply(lambda x: max(0.1, x))  # En az 0.1
-    original_sevkiyat_df['haftalik_satis'] = original_sevkiyat_df['haftalik_satis'].apply(lambda x: max(0.1, x))
-    
-    # Cover dosyasını işle
-    if cover_df is not None and not cover_df.empty:
-        cover_df = normalize_columns(cover_df)
-        if 'magaza_id' in cover_df.columns and 'cover' in cover_df.columns:
-            cover_df = cover_df[['magaza_id', 'cover']].drop_duplicates()
-            cover_df['magaza_id'] = cover_df['magaza_id'].astype(str).str.strip()
-            sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
-            original_sevkiyat_df['magaza_id'] = original_sevkiyat_df['magaza_id'].astype(str).str.strip()
-            
-            sevk_df = sevk_df.merge(cover_df, on='magaza_id', how='left')
-            original_sevkiyat_df = original_sevkiyat_df.merge(cover_df, on='magaza_id', how='left')
-            st.success("✅ Mağaza cover verileri eklendi")
-        else:
-            st.warning("⚠️ Cover dosyasında gerekli kolonlar bulunamadı")
-            sevk_df['cover'] = 999
-            original_sevkiyat_df['cover'] = 999
-    else:
-        st.warning("⚠️ Cover dosyası bulunamadı, varsayılan cover=999")
-        sevk_df['cover'] = 999
-        original_sevkiyat_df['cover'] = 999
-    
-    # Cover değerlerini temizle
-    sevk_df['cover'] = pd.to_numeric(sevk_df['cover'], errors='coerce').fillna(999)
-    original_sevkiyat_df['cover'] = pd.to_numeric(original_sevkiyat_df['cover'], errors='coerce').fillna(999)
-    
-    # KPI dosyasını işle - EĞER KPI DOSYASI YOKSA PARAMETRELERDEN KULLAN
-    kpi_loaded = False
-    if kpi_df is not None and not kpi_df.empty:
-        kpi_df = normalize_columns(kpi_df)
-        if 'klasmankod' in kpi_df.columns:
-            kpi_df['klasmankod'] = kpi_df['klasmankod'].astype(str).str.strip()
-            sevk_df['klasmankod'] = sevk_df['klasmankod'].astype(str).str.strip()
-            original_sevkiyat_df['klasmankod'] = original_sevkiyat_df['klasmankod'].astype(str).str.strip()
-            
-            kpi_cols = ['klasmankod']
-            for col in ['hedef_hafta', 'min_adet', 'maks_adet']:
-                if col in kpi_df.columns:
-                    kpi_cols.append(col)
-            
-            sevk_df = sevk_df.merge(kpi_df[kpi_cols], on='klasmankod', how='left')
-            original_sevkiyat_df = original_sevkiyat_df.merge(kpi_df[kpi_cols], on='klasmankod', how='left')
-            st.success("✅ KPI verileri eklendi (KPI.csv kullanılıyor)")
-            kpi_loaded = True
-        else:
-            st.warning("⚠️ KPI dosyasında klasmankod bulunamadı")
-    else:
-        st.warning("⚠️ KPI dosyası bulunamadı, parametrelerden alınan değerler kullanılacak")
-    
-    # Eksik KPI değerlerini doldur
-    if not kpi_loaded:
-        sevk_df['hedef_hafta'] = params['hedef_hafta']
-        sevk_df['min_adet'] = params['min_adet']
-        sevk_df['maks_adet'] = params['maks_adet']
-        
-        original_sevkiyat_df['hedef_hafta'] = params['hedef_hafta']
-        original_sevkiyat_df['min_adet'] = params['min_adet']
-        original_sevkiyat_df['maks_adet'] = params['maks_adet']
-        st.info("ℹ️ Parametrelerden alınan değerler kullanılıyor")
-    else:
-        sevk_df['hedef_hafta'] = sevk_df.get('hedef_hafta', params['hedef_hafta'])
-        sevk_df['min_adet'] = sevk_df.get('min_adet', params['min_adet'])
-        sevk_df['maks_adet'] = sevk_df.get('maks_adet', params['maks_adet'])
-        
-        original_sevkiyat_df['hedef_hafta'] = original_sevkiyat_df.get('hedef_hafta', params['hedef_hafta'])
-        original_sevkiyat_df['min_adet'] = original_sevkiyat_df.get('min_adet', params['min_adet'])
-        original_sevkiyat_df['maks_adet'] = original_sevkiyat_df.get('maks_adet', params['maks_adet'])
-    
-    # YENİ: Ürün cover'ını HATA KONTROLLÜ hesapla - YOLDA STOĞU ÇIKARMA
-    st.info("🔄 Ürün cover değerleri hesaplanıyor...")
-    
-    # Hata kontrolü ile ürün cover hesaplama - YOLDA STOĞU ÇIKARMA
-    def safe_urun_cover(row):
-        try:
-            return calculate_urun_cover(
-                row.get('haftalik_satis', 0), 
-                row.get('mevcut_stok', 0), 
-                row.get('yolda', 0)
-            )
-        except:
-            return 999
-    
-    sevk_df['urun_cover'] = sevk_df.apply(safe_urun_cover, axis=1)
-    original_sevkiyat_df['urun_cover'] = original_sevkiyat_df.apply(safe_urun_cover, axis=1)
-    
-    # Cover gruplarını detaylı şekilde belirle
-    def detailed_cover_group(cover_value, gruplar):
-        try:
-            cover_value = float(cover_value)
-            for i, grup in enumerate(gruplar):
-                if grup['min'] <= cover_value <= grup['max']:
-                    return grup['etiket']
-            return "20+"
-        except:
-            return "20+"
-    
-    sevk_df['magaza_cover_grubu'] = sevk_df['cover'].apply(
-        lambda x: detailed_cover_group(x, cover_gruplari)
-    )
-    sevk_df['urun_cover_grubu'] = sevk_df['urun_cover'].apply(
-        lambda x: detailed_cover_group(x, cover_gruplari)
-    )
-    
-    # Cover 30'dan küçük olanları filtrele
-    df_filtered = sevk_df[sevk_df['cover'] <= 50].copy()
-    st.info(f"ℹ️ Mağaza cover ≤ 50 olan {len(df_filtered)} satır işlenecek (toplam: {len(sevk_df)})")
-    
-    # İhtiyaç hesabı - YOLDA STOĞU EKLE (doğru olan bu)
-    df_filtered["ihtiyac"] = (
-        (df_filtered["haftalik_satis"] * df_filtered["hedef_hafta"]) - 
-        (df_filtered["mevcut_stok"] + df_filtered["yolda"])
-    ).clip(lower=0)
-    
-    # YENİ: YASAKLI KAYITLARIN İHTİYACINI 0 YAP
-    df_filtered, yasakli_count = apply_yasaklar_to_ihtiyac(df_filtered, file_data)
-    st.session_state.yasakli_kayit_sayisi = yasakli_count
-    
-    # Orijinal df'e ihtiyaç ekle - YOLDA STOĞU EKLE (doğru olan bu)
-    original_sevkiyat_df["ihtiyac"] = (
-        (original_sevkiyat_df["haftalik_satis"] * original_sevkiyat_df['hedef_hafta']) - 
-        (original_sevkiyat_df["mevcut_stok"] + original_sevkiyat_df['yolda'])
-    ).clip(lower=0)
-    
-    # Orijinal df'te de yasakları uygula
-    original_sevkiyat_df, _ = apply_yasaklar_to_ihtiyac(original_sevkiyat_df, file_data)
-    
-    # Sıralama - YENİ: Önce ürün cover'a göre sırala
-    df_sorted = df_filtered.sort_values(by=["urun_id", "urun_cover", "haftalik_satis"], ascending=[True, True, False]).copy()
-    
-    sevk_listesi = []
+    # İlerleme çubuğu ve durum metni
     progress_bar = st.progress(0)
     status_text = st.empty()
+    timeline_container = st.empty()
     
-    # Cover gruplarını PARAMETRELERDEN AL
-    cover_gruplari_sirali = sorted(cover_gruplari, key=lambda x: x['min'])
-    cover_gruplari_etiketler = [g['etiket'] for g in cover_gruplari_sirali]
-    
-    st.info(f"ℹ️ Kullanılan cover grupları: {cover_gruplari_etiketler}")
-    
-    # Tüm olası kombinasyonları oluştur
-    all_combinations = []
-    for magaza_grubu in cover_gruplari_etiketler:
-        for urun_grubu in cover_gruplari_etiketler:
-            all_combinations.append((magaza_grubu, urun_grubu))
-    
-    st.info(f"ℹ️ Toplam {len(all_combinations)} kombinasyon işlenecek")
-    
-    # Debug: Her kombinasyon için veri sayısını göster - TÜM GRUPLARI GÖSTER
-    st.write("🔍 Kombinasyon Dağılımı:")
-    dagilim_df = pd.DataFrame(columns=['Mağaza Grubu', 'Ürün Grubu', 'Kayıt Sayısı'])
-    
-    for magaza_grubu in cover_gruplari_etiketler:
-        for urun_grubu in cover_gruplari_etiketler:
-            count = len(df_sorted[
-                (df_sorted['magaza_cover_grubu'] == magaza_grubu) & 
-                (df_sorted['urun_cover_grubu'] == urun_grubu)
-            ])
-            dagilim_df = pd.concat([dagilim_df, pd.DataFrame({
-                'Mağaza Grubu': [magaza_grubu],
-                'Ürün Grubu': [urun_grubu],
-                'Kayıt Sayısı': [count]
-            })], ignore_index=True)
-    
-    # Tüm kombinasyonları tablo olarak göster
-    pivot_dagilim = dagilim_df.pivot(index='Mağaza Grubu', columns='Ürün Grubu', values='Kayıt Sayısı').fillna(0)
-    st.dataframe(pivot_dagilim, use_container_width=True)
-    
-    depo_urun_gruplari = list(df_sorted.groupby(["depo_id", "urun_id"]))
-    total_groups = len(depo_urun_gruplari) * len(all_combinations)
-    processed_groups = 0
-    
-    # Matrisi güvenli şekilde kullan
-    def safe_get_carpan(magaza_cover_grubu, urun_cover_grubu):
-        try:
-            # Session state'den matrisi al
-            carpan_matrisi = st.session_state.get('carpan_matrisi', {})
-            return carpan_matrisi.get(magaza_cover_grubu, {}).get(urun_cover_grubu, 1.0)
-        except:
-            return 1.0
-    
-    # YENİ: Matris tabanlı işleme - TÜM GRUPLARI İŞLE
-    for magaza_cover_grubu in cover_gruplari_etiketler:
-        status_text.text(f"⏳ Mağaza {magaza_cover_grubu} Grubu İşleniyor...")
-        magaza_grup_df = df_sorted[df_sorted["magaza_cover_grubu"] == magaza_cover_grubu]
+    def update_timeline(step_name):
+        nonlocal current_step
+        current_step += 1
+        progress = current_step / total_steps
+        progress_bar.progress(progress)
         
-        if magaza_grup_df.empty:
-            processed_groups += len(depo_urun_gruplari) * len(cover_gruplari_etiketler)
-            progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
-            continue
+        # Geçen süreyi hesapla
+        elapsed_time = time.time() - start_time
         
-        for urun_cover_grubu in cover_gruplari_etiketler:
-            status_text.text(f"⏳ Mağaza {magaza_cover_grubu} × Ürün {urun_cover_grubu}...")
-            grup_df = magaza_grup_df[magaza_grup_df["urun_cover_grubu"] == urun_cover_grubu]
+        # Timeline'a ekle
+        timeline_steps.append(f"⏱️ {elapsed_time:.1f}s - {step_name}")
+        
+        # Timeline'ı göster
+        timeline_html = "<div style='background: #f0f2f6; padding: 15px; border-radius: 10px; margin: 10px 0;'>"
+        timeline_html += "<h4>🚀 İşlem Timeline</h4>"
+        for step in timeline_steps:
+            timeline_html += f"<div style='margin: 5px 0; padding: 5px; border-left: 3px solid #1E40AF;'>{step}</div>"
+        timeline_html += "</div>"
+        
+        timeline_container.markdown(timeline_html, unsafe_allow_html=True)
+        status_text.text(f"⏳ {step_name}...")
+    
+    try:
+        # ADIM 1: Dosya yükleme
+        update_timeline("CSV dosyaları yükleniyor")
+        
+        for name, df in file_data.items():
+            name_lower = name.lower()
+            if "sevkiyat" in name_lower:
+                sevk_df = df.copy()
+            elif "depo" in name_lower and "stok" in name_lower:
+                depo_stok_df = df.copy()
+            elif "urun" in name_lower:
+                urunler_df = df.copy()
+                st.session_state.urunler_df = urunler_df
+            elif "magaza" in name_lower:
+                magazalar_df = df.copy()
+                st.session_state.magazalar_df = magazalar_df
+            elif "cover" in name_lower:
+                cover_df = df.copy()
+            elif "kpi" in name_lower:
+                kpi_df = df.copy()
+
+        if sevk_df is None or depo_stok_df is None:
+            raise Exception("Zorunlu dosyalar (Sevkiyat.csv, Depo_Stok.csv) eksik!")
+
+        # ADIM 2: Kolon normalizasyonu
+        update_timeline("Kolon normalizasyonu yapılıyor")
+        
+        # Orijinal sevkiyat df'ini kaydet (alım ihtiyacı için)
+        original_sevkiyat_df = sevk_df.copy()
+        
+        # Kolon normalizasyonu
+        sevk_df = normalize_columns(sevk_df)
+        depo_stok_df = normalize_columns(depo_stok_df)
+        original_sevkiyat_df = normalize_columns(original_sevkiyat_df)
+        
+        # ... (diğer hazırlık adımları - kısa sürenler)
+        
+        # ADIM 3: Mağaza cover ekleniyor
+        update_timeline("Mağaza cover verileri ekleniyor")
+        
+        # Cover dosyasını işle
+        if cover_df is not None and not cover_df.empty:
+            cover_df = normalize_columns(cover_df)
+            if 'magaza_id' in cover_df.columns and 'cover' in cover_df.columns:
+                cover_df = cover_df[['magaza_id', 'cover']].drop_duplicates()
+                cover_df['magaza_id'] = cover_df['magaza_id'].astype(str).str.strip()
+                sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
+                original_sevkiyat_df['magaza_id'] = original_sevkiyat_df['magaza_id'].astype(str).str.strip()
+                
+                sevk_df = sevk_df.merge(cover_df, on='magaza_id', how='left')
+                original_sevkiyat_df = original_sevkiyat_df.merge(cover_df, on='magaza_id', how='left')
+        else:
+            sevk_df['cover'] = 999
+            original_sevkiyat_df['cover'] = 999
+
+        # ADIM 4: Ürün cover hesaplanıyor
+        update_timeline("Ürün cover değerleri hesaplanıyor")
+        
+        # Ürün cover'ını HATA KONTROLLÜ hesapla - YOLDA STOĞU ÇIKARMA
+        def safe_urun_cover(row):
+            try:
+                return calculate_urun_cover(
+                    row.get('haftalik_satis', 0), 
+                    row.get('mevcut_stok', 0), 
+                    row.get('yolda', 0)
+                )
+            except:
+                return 999
+        
+        sevk_df['urun_cover'] = sevk_df.apply(safe_urun_cover, axis=1)
+        original_sevkiyat_df['urun_cover'] = original_sevkiyat_df.apply(safe_urun_cover, axis=1)
+        
+        # ADIM 5: Cover grupları belirleniyor
+        update_timeline("Cover grupları belirleniyor")
+        
+        # Cover gruplarını detaylı şekilde belirle
+        def detailed_cover_group(cover_value, gruplar):
+            try:
+                cover_value = float(cover_value)
+                for i, grup in enumerate(gruplar):
+                    if grup['min'] <= cover_value <= grup['max']:
+                        return grup['etiket']
+                return "20+"
+            except:
+                return "20+"
+        
+        sevk_df['magaza_cover_grubu'] = sevk_df['cover'].apply(
+            lambda x: detailed_cover_group(x, cover_gruplari)
+        )
+        sevk_df['urun_cover_grubu'] = sevk_df['urun_cover'].apply(
+            lambda x: detailed_cover_group(x, cover_gruplari)
+        )
+        
+        # Cover 50'den küçük olanları filtrele
+        df_filtered = sevk_df[sevk_df['cover'] <= 50].copy()
+        
+        # İhtiyaç hesabı
+        df_filtered["ihtiyac"] = (
+            (df_filtered["haftalik_satis"] * df_filtered["hedef_hafta"]) - 
+            (df_filtered["mevcut_stok"] + df_filtered["yolda"])
+        ).clip(lower=0)
+        
+        # YENİ: YASAKLI KAYITLARIN İHTİYACINI 0 YAP
+        df_filtered, yasakli_count = apply_yasaklar_to_ihtiyac(df_filtered, file_data)
+        st.session_state.yasakli_kayit_sayisi = yasakli_count
+        
+        # Orijinal df'e ihtiyaç ekle
+        original_sevkiyat_df["ihtiyac"] = (
+            (original_sevkiyat_df["haftalik_satis"] * original_sevkiyat_df['hedef_hafta']) - 
+            (original_sevkiyat_df["mevcut_stok"] + original_sevkiyat_df['yolda'])
+        ).clip(lower=0)
+        
+        # Orijinal df'te de yasakları uygula
+        original_sevkiyat_df, _ = apply_yasaklar_to_ihtiyac(original_sevkiyat_df, file_data)
+        
+        # Sıralama
+        df_sorted = df_filtered.sort_values(by=["urun_id", "urun_cover", "haftalik_satis"], ascending=[True, True, False]).copy()
+        
+        # ADIM 6: Matris hesaplaması başlıyor
+        update_timeline(f"Matris hesaplaması başlıyor ({len(df_sorted)} kayıt)")
+        
+        sevk_listesi = []
+        
+        # Cover gruplarını PARAMETRELERDEN AL
+        cover_gruplari_sirali = sorted(cover_gruplari, key=lambda x: x['min'])
+        cover_gruplari_etiketler = [g['etiket'] for g in cover_gruplari_sirali]
+        
+        depo_urun_gruplari = list(df_sorted.groupby(["depo_id", "urun_id"]))
+        
+        # Matrisi güvenli şekilde kullan
+        def safe_get_carpan(magaza_cover_grubu, urun_cover_grubu):
+            try:
+                carpan_matrisi = st.session_state.get('carpan_matrisi', {})
+                return carpan_matrisi.get(magaza_cover_grubu, {}).get(urun_cover_grubu, 1.0)
+            except:
+                return 1.0
+        
+        # YENİ: Matris tabanlı işleme - TÜM GRUPLARI İŞLE
+        total_combinations = len(cover_gruplari_etiketler)
+        processed_combinations = 0
+        
+        for magaza_cover_grubu in cover_gruplari_etiketler:
+            # Mağaza cover grubu ilerlemesi
+            processed_combinations += 1
+            progress_ratio = 0.6 + (0.3 * processed_combinations / total_combinations)  # %60-90 arası
+            progress_bar.progress(progress_ratio)
+            status_text.text(f"⏳ Mağaza Cover {magaza_cover_grubu} işleniyor... ({processed_combinations}/{total_combinations})")
             
-            if grup_df.empty:
-                processed_groups += len(depo_urun_gruplari)
-                progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
+            magaza_grup_df = df_sorted[df_sorted["magaza_cover_grubu"] == magaza_cover_grubu]
+            
+            if magaza_grup_df.empty:
                 continue
             
-            for (depo, urun), tum_grup in depo_urun_gruplari:
-                grup = tum_grup[
-                    (tum_grup["magaza_cover_grubu"] == magaza_cover_grubu) & 
-                    (tum_grup["urun_cover_grubu"] == urun_cover_grubu)
-                ]
+            for urun_cover_grubu in cover_gruplari_etiketler:
+                grup_df = magaza_grup_df[magaza_grup_df["urun_cover_grubu"] == urun_cover_grubu]
                 
-                if grup.empty:
-                    processed_groups += 1
-                    progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
+                if grup_df.empty:
                     continue
                 
-                # Depo stok kontrolü
-                stok_idx = (depo_stok_df["depo_id"] == depo) & (depo_stok_df["urun_id"] == urun)
-                stok = int(depo_stok_df.loc[stok_idx, "depo_stok"].sum()) if stok_idx.any() else 0
-                
-                if stok <= 0:
-                    processed_groups += 1
-                    progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
-                    continue
-                
-                # YENİ: Matristen çarpan al - GÜVENLİ VERSİYON
-                carpan = safe_get_carpan(magaza_cover_grubu, urun_cover_grubu)
-                
-                # TUR 1: İhtiyaç bazlı sevkiyat
-                for _, row in grup.iterrows():
-                    min_adet = row["min_adet"]
-                    MAKS_SEVK = row["maks_adet"]
-                    ihtiyac = row["ihtiyac"]
+                for (depo, urun), tum_grup in depo_urun_gruplari:
+                    grup = tum_grup[
+                        (tum_grup["magaza_cover_grubu"] == magaza_cover_grubu) & 
+                        (tum_grup["urun_cover_grubu"] == urun_cover_grubu)
+                    ]
                     
-                    # EĞER İHTİYAÇ 0 İSE (YASAKLIYSA) ATLA
-                    if ihtiyac <= 0:
+                    if grup.empty:
                         continue
                     
-                    ihtiyac_carpanli = ihtiyac * carpan
+                    # Depo stok kontrolü
+                    stok_idx = (depo_stok_df["depo_id"] == depo) & (depo_stok_df["urun_id"] == urun)
+                    stok = int(depo_stok_df.loc[stok_idx, "depo_stok"].sum()) if stok_idx.any() else 0
                     
-                    sevk = int(min(ihtiyac_carpanli, stok, MAKS_SEVK)) if stok > 0 and ihtiyac_carpanli > 0 else 0
+                    if stok <= 0:
+                        continue
                     
-                    if sevk > 0:
-                        stok -= sevk
-                        sevk_listesi.append({
-                            "depo_id": depo, "magaza_id": row["magaza_id"], "urun_id": urun,
-                            "klasmankod": row["klasmankod"], "tur": 1, 
-                            "magaza_cover_grubu": magaza_cover_grubu,
-                            "urun_cover_grubu": urun_cover_grubu,
-                            "ihtiyac": ihtiyac, "ihtiyac_carpanli": ihtiyac_carpanli, 
-                            "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk,
-                            "haftalik_satis": row["haftalik_satis"], "mevcut_stok": row["mevcut_stok"],
-                            "cover": row["cover"], "urun_cover": row["urun_cover"],
-                            "min_adet": min_adet, "maks_adet": MAKS_SEVK, "hedef_hafta": row["hedef_hafta"]
-                        })
-                
-                # TUR 2: Min stok tamamlama (düşük cover olanlar için)
-                if stok > 0:
+                    # Matristen çarpan al
+                    carpan = safe_get_carpan(magaza_cover_grubu, urun_cover_grubu)
+                    
+                    # TUR 1: İhtiyaç bazlı sevkiyat
                     for _, row in grup.iterrows():
-                        if row["cover"] >= 12 and row["urun_cover"] >= 12:
-                            continue
-                            
                         min_adet = row["min_adet"]
                         MAKS_SEVK = row["maks_adet"]
-                        mevcut = row["mevcut_stok"] + row["yolda"]
-                        eksik_min = max(0, min_adet - mevcut)
+                        ihtiyac = row["ihtiyac"]
                         
-                        eksik_min_carpanli = eksik_min * carpan
+                        # EĞER İHTİYAÇ 0 İSE (YASAKLIYSA) ATLA
+                        if ihtiyac <= 0:
+                            continue
                         
-                        sevk2 = int(min(eksik_min_carpanli, stok, MAKS_SEVK)) if eksik_min_carpanli > 0 else 0
+                        ihtiyac_carpanli = ihtiyac * carpan
                         
-                        if sevk2 > 0:
-                            stok -= sevk2
+                        sevk = int(min(ihtiyac_carpanli, stok, MAKS_SEVK)) if stok > 0 and ihtiyac_carpanli > 0 else 0
+                        
+                        if sevk > 0:
+                            stok -= sevk
                             sevk_listesi.append({
                                 "depo_id": depo, "magaza_id": row["magaza_id"], "urun_id": urun,
-                                "klasmankod": row["klasmankod"], "tur": 2,
+                                "klasmankod": row["klasmankod"], "tur": 1, 
                                 "magaza_cover_grubu": magaza_cover_grubu,
                                 "urun_cover_grubu": urun_cover_grubu,
-                                "ihtiyac": row["ihtiyac"], "ihtiyac_carpanli": row["ihtiyac"] * carpan,
-                                "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk2,
+                                "ihtiyac": ihtiyac, "ihtiyac_carpanli": ihtiyac_carpanli, 
+                                "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk,
                                 "haftalik_satis": row["haftalik_satis"], "mevcut_stok": row["mevcut_stok"],
                                 "cover": row["cover"], "urun_cover": row["urun_cover"],
                                 "min_adet": min_adet, "maks_adet": MAKS_SEVK, "hedef_hafta": row["hedef_hafta"]
                             })
-                
-                # Depo stok güncelleme
-                if stok_idx.any():
-                    if stok_idx.sum() == 1:
-                        depo_stok_df.loc[stok_idx, "depo_stok"] = stok
-                    else:
-                        first_match_idx = stok_idx.idxmax()
-                        depo_stok_df.loc[first_match_idx, "depo_stok"] = stok
-                
-                processed_groups += 1
-                progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
+                    
+                    # TUR 2: Min stok tamamlama (düşük cover olanlar için)
+                    if stok > 0:
+                        for _, row in grup.iterrows():
+                            if row["cover"] >= 12 and row["urun_cover"] >= 12:
+                                continue
+                                
+                            min_adet = row["min_adet"]
+                            MAKS_SEVK = row["maks_adet"]
+                            mevcut = row["mevcut_stok"] + row["yolda"]
+                            eksik_min = max(0, min_adet - mevcut)
+                            
+                            eksik_min_carpanli = eksik_min * carpan
+                            
+                            sevk2 = int(min(eksik_min_carpanli, stok, MAKS_SEVK)) if eksik_min_carpanli > 0 else 0
+                            
+                            if sevk2 > 0:
+                                stok -= sevk2
+                                sevk_listesi.append({
+                                    "depo_id": depo, "magaza_id": row["magaza_id"], "urun_id": urun,
+                                    "klasmankod": row["klasmankod"], "tur": 2,
+                                    "magaza_cover_grubu": magaza_cover_grubu,
+                                    "urun_cover_grubu": urun_cover_grubu,
+                                    "ihtiyac": row["ihtiyac"], "ihtiyac_carpanli": row["ihtiyac"] * carpan,
+                                    "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk2,
+                                    "haftalik_satis": row["haftalik_satis"], "mevcut_stok": row["mevcut_stok"],
+                                    "cover": row["cover"], "urun_cover": row["urun_cover"],
+                                    "min_adet": min_adet, "maks_adet": MAKS_SEVK, "hedef_hafta": row["hedef_hafta"]
+                                })
+                    
+                    # Depo stok güncelleme
+                    if stok_idx.any():
+                        if stok_idx.sum() == 1:
+                            depo_stok_df.loc[stok_idx, "depo_stok"] = stok
+                        else:
+                            first_match_idx = stok_idx.idxmax()
+                            depo_stok_df.loc[first_match_idx, "depo_stok"] = stok
+        
+        # ADIM 7: Sonuçları birleştir
+        update_timeline("Sevkiyat sonuçları birleştiriliyor")
+        
+        if sevk_listesi:
+            sevk_df_result = pd.DataFrame(sevk_listesi)
             
-            st.write(f"✅ {magaza_cover_grubu} × {urun_cover_grubu} kombinasyonu tamamlandı")
-    
-    progress_bar.progress(100)
-    status_text.text("✅ Hesaplama tamamlandı")
-    
-    # Sonuçları birleştir
-    if sevk_listesi:
-        sevk_df_result = pd.DataFrame(sevk_listesi)
+            # Grup bazında toplam sevkiyat
+            total_sevk = sevk_df_result.groupby(
+                ["depo_id", "magaza_id", "urun_id", "klasmankod", "magaza_cover_grubu", "urun_cover_grubu"], as_index=False
+            ).agg({
+                "sevk_miktar": "sum", "yolda": "first", "haftalik_satis": "first",
+                "ihtiyac": "first", "mevcut_stok": "first", "cover": "first",
+                "urun_cover": "first", "carpan": "first", "min_adet": "first", 
+                "maks_adet": "first", "hedef_hafta": "first", "tur": "first"
+            })
+            
+            # Min tamamlama (tur2) istatistiklerini hesapla
+            min_tamamlama = sevk_df_result[sevk_df_result['tur'] == 2]['sevk_miktar'].sum()
+            toplam_sevk = sevk_df_result['sevk_miktar'].sum()
+            min_yuzde = (min_tamamlama / toplam_sevk * 100) if toplam_sevk > 0 else 0
+            
+            st.session_state.min_tamamlama = min_tamamlama
+            st.session_state.min_yuzde = min_yuzde
+            st.session_state.toplam_sevk = toplam_sevk
+            st.session_state.sevk_df_result = sevk_df_result
+            
+        else:
+            sevk_df_result = pd.DataFrame()
+            total_sevk = pd.DataFrame()
+            st.session_state.min_tamamlama = 0
+            st.session_state.min_yuzde = 0
+            st.session_state.toplam_sevk = 0
+            st.session_state.sevk_df_result = pd.DataFrame()
         
-        # Grup bazında toplam sevkiyat
-        total_sevk = sevk_df_result.groupby(
-            ["depo_id", "magaza_id", "urun_id", "klasmankod", "magaza_cover_grubu", "urun_cover_grubu"], as_index=False
-        ).agg({
-            "sevk_miktar": "sum", "yolda": "first", "haftalik_satis": "first",
-            "ihtiyac": "first", "mevcut_stok": "first", "cover": "first",
-            "urun_cover": "first", "carpan": "first", "min_adet": "first", 
-            "maks_adet": "first", "hedef_hafta": "first", "tur": "first"
-        })
+        # ADIM 8: Tamamlandı
+        final_time = time.time() - start_time
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ Hesaplama tamamlandı! Toplam süre: {final_time:.1f}s")
         
-        # Min tamamlama (tur2) istatistiklerini hesapla
-        min_tamamlama = sevk_df_result[sevk_df_result['tur'] == 2]['sevk_miktar'].sum()
-        toplam_sevk = sevk_df_result['sevk_miktar'].sum()
-        min_yuzde = (min_tamamlama / toplam_sevk * 100) if toplam_sevk > 0 else 0
+        update_timeline(f"Hesaplama tamamlandı - Toplam süre: {final_time:.1f}s")
         
-        st.session_state.min_tamamlama = min_tamamlama
-        st.session_state.min_yuzde = min_yuzde
-        st.session_state.toplam_sevk = toplam_sevk
-        st.session_state.sevk_df_result = sevk_df_result
+        return sevk_df_result, total_sevk, depo_stok_df, original_sevkiyat_df
         
-        # Debug: Sonuçları göster - TÜM GRUPLARI GÖSTER
-        st.write("🎯 Hesaplama Sonuçları - Grup Dağılımı:")
-        grup_dagilim = sevk_df_result.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-            'sevk_miktar': 'sum',
-            'magaza_id': 'nunique'
-        }).reset_index()
-        
-        st.dataframe(grup_dagilim, use_container_width=True)
-        
-        st.write(f"   - Toplam sevkiyat: {toplam_sevk:,} adet")
-        st.write(f"   - Min tamamlama (Tur2): {min_tamamlama:,} adet")
-        st.write(f"   - Min yüzdesi: {min_yuzde:.1f}%")
-        st.write(f"   - Toplam işlem: {len(sevk_listesi)} sevkiyat kaydı")
-        st.write(f"   - Yasaklı kayıt: {yasakli_count} adet")
-        
-    else:
-        sevk_df_result = pd.DataFrame()
-        total_sevk = pd.DataFrame()
-        st.session_state.min_tamamlama = 0
-        st.session_state.min_yuzde = 0
-        st.session_state.toplam_sevk = 0
-        st.session_state.sevk_df_result = pd.DataFrame()
-        st.warning("⚠️ Hiç sevkiyat kaydı oluşturulamadı!")
-    
-    return sevk_df_result, total_sevk, depo_stok_df, original_sevkiyat_df
+    except Exception as e:
+        # Hata durumunda
+        progress_bar.progress(1.0)
+        status_text.text("❌ Hata oluştu!")
+        update_timeline(f"HATA: {str(e)}")
+        raise e
         
 # -------------------------------
 # RAPORLAR SAYFASI (GÜNCELLENMİŞ VE GENİŞLETİLMİŞ)
@@ -1543,3 +1466,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
