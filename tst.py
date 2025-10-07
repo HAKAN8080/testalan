@@ -82,171 +82,62 @@ def get_cover_grubu_adi(cover_value, cover_gruplari):
     except:
         return "20+"
 
-def load_yasaklar(file_data):
-    """Yasaklar dosyasını yükle ve işle"""
-    yasaklar_df = None
+def apply_yasaklar_to_ihtiyac(sevk_df, file_data):
+    """İhtiyaç hesaplamasında yasaklıları 0'a çek"""
     
+    # Yasakları yükle
+    yasaklar_df = None
     for name, df in file_data.items():
         if "yasak" in name.lower():
             yasaklar_df = df.copy()
-            st.info(f"🚫 Yasaklar dosyası: {len(yasaklar_df)} satır")
             break
     
-    if yasaklar_df is not None and not yasaklar_df.empty:
-        try:
-            yasaklar_df = normalize_columns(yasaklar_df)
-            
-            # Gerekli kolon kontrolü
-            required_cols = ['magaza_id', 'urun_id', 'yasak']
-            missing_cols = [col for col in required_cols if col not in yasaklar_df.columns]
-            
-            if missing_cols:
-                st.warning(f"⚠️ Yasaklar dosyasında eksik kolonlar: {missing_cols}. Yasaklar uygulanamayacak.")
-                return None
-            
-            # Veri tiplerini düzelt
-            yasaklar_df['magaza_id'] = yasaklar_df['magaza_id'].astype(str).str.strip()
-            yasaklar_df['urun_id'] = yasaklar_df['urun_id'].astype(str).str.strip()
-            yasaklar_df['yasak'] = pd.to_numeric(yasaklar_df['yasak'], errors='coerce').fillna(0).astype(int)
-            
-            # Sadece yasaklı olanları (yasak=1) filtrele
-            yasakli_df = yasaklar_df[yasaklar_df['yasak'] == 1].copy()
-            
-            st.success(f"✅ {len(yasakli_df)} yasaklı mağaza-ürün kombinasyonu yüklendi")
-            
-            # Debug: Yasaklı kombinasyonları göster
-            if not yasakli_df.empty:
-                st.write("🔍 Yasaklı kombinasyonlar (ilk 10):")
-                st.dataframe(yasakli_df.head(10))
-            
-            return yasakli_df
-            
-        except Exception as e:
-            st.error(f"❌ Yasaklar dosyası işlenirken hata: {str(e)}")
-            return None
-    
-    return None
-
-def is_yasakli(magaza_id, urun_id, yasaklar_df):
-    """Mağaza-ürün kombinasyonunun yasaklı olup olmadığını kontrol et"""
     if yasaklar_df is None or yasaklar_df.empty:
-        return False
+        return sevk_df, 0
     
     try:
-        magaza_id_str = str(magaza_id).strip()
-        urun_id_str = str(urun_id).strip()
+        # Yasakları normalize et
+        yasaklar_df = normalize_columns(yasaklar_df)
+        yasaklar_df['magaza_id'] = yasaklar_df['magaza_id'].astype(str).str.strip()
+        yasaklar_df['urun_id'] = yasaklar_df['urun_id'].astype(str).str.strip()
+        yasaklar_df['yasak'] = pd.to_numeric(yasaklar_df['yasak'], errors='coerce').fillna(0)
         
-        # Debug için
-        if len(yasaklar_df) < 10:  # Sadece küçük datasetlerde debug yap
-            st.write(f"🔍 Yasak kontrolü: magaza_id={magaza_id_str}, urun_id={urun_id_str}")
+        # Sadece yasaklı olanları al
+        yasakli_df = yasaklar_df[yasaklar_df['yasak'] == 1]
         
-        yasak = yasaklar_df[
-            (yasaklar_df['magaza_id'] == magaza_id_str) & 
-            (yasaklar_df['urun_id'] == urun_id_str)
-        ]
+        if yasakli_df.empty:
+            return sevk_df, 0
         
-        return len(yasak) > 0
+        # Sevkiyat verisini hazırla
+        sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
+        sevk_df['urun_id'] = sevk_df['urun_id'].astype(str).str.strip()
+        
+        # Yasaklı kombinasyonları bul
+        yasakli_kombinasyonlar = yasakli_df[['magaza_id', 'urun_id']].drop_duplicates()
+        
+        # Yasaklı kayıtları bul
+        yasakli_kayitlar = sevk_df.merge(
+            yasakli_kombinasyonlar, 
+            on=['magaza_id', 'urun_id'], 
+            how='inner'
+        )
+        
+        yasakli_count = len(yasakli_kayitlar)
+        
+        if yasakli_count > 0:
+            # Yasaklı kayıtların index'lerini bul
+            yasakli_indexes = yasakli_kayitlar.index
+            
+            # İHTİYAÇ'ı 0 yap - BÖYLECE SEVKİYAT HİÇ OLUŞMAZ
+            sevk_df.loc[yasakli_indexes, 'ihtiyac'] = 0
+            
+            st.success(f"🚫 {yasakli_count} yasaklı kaydın ihtiyacı 0'a çekildi")
+        
+        return sevk_df, yasakli_count
+        
     except Exception as e:
-        st.error(f"❌ Yasak kontrolü hatası: {str(e)}")
-        return False
-
-def calculate_shipment_optimized(file_data, params, cover_gruplari):
-    # Dosyaları yükle
-    sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df = None, None, None, None, None, None
-    
-    for name, df in file_data.items():
-        name_lower = name.lower()
-        if "sevkiyat" in name_lower:
-            sevk_df = df.copy()
-            st.info(f"📊 Sevkiyat dosyası: {len(sevk_df)} satır")
-        elif "depo" in name_lower and "stok" in name_lower:
-            depo_stok_df = df.copy()
-            st.info(f"📦 Depo stok dosyası: {len(depo_stok_df)} satır")
-        elif "urun" in name_lower:
-            urunler_df = df.copy()
-            st.info(f"🏷️ Ürünler dosyası: {len(urunler_df)} satır")
-            st.session_state.urunler_df = urunler_df
-        elif "magaza" in name_lower:
-            magazalar_df = df.copy()
-            st.info(f"🏪 Mağazalar dosyası: {len(magazalar_df)} satır")
-            st.session_state.magazalar_df = magazalar_df
-        elif "cover" in name_lower:
-            cover_df = df.copy()
-            st.info(f"📈 Cover dosyası: {len(cover_df)} satır")
-        elif "kpi" in name_lower:
-            kpi_df = df.copy()
-            st.info(f"🎯 KPI dosyası: {len(kpi_df)} satır")
-    
-    if sevk_df is None or depo_stok_df is None:
-        raise Exception("Zorunlu dosyalar (Sevkiyat.csv, Depo_Stok.csv) eksik!")
-    
-    # Yasakları yükle
-    yasakli_df = load_yasaklar(file_data)
-    
-    # Orijinal sevkiyat df'ini kaydet (alım ihtiyacı için)
-    original_sevkiyat_df = sevk_df.copy()
-    
-    # Kolon normalizasyonu
-    sevk_df = normalize_columns(sevk_df)
-    depo_stok_df = normalize_columns(depo_stok_df)
-    original_sevkiyat_df = normalize_columns(original_sevkiyat_df)
-    
-    # YENİ: Yasaklı kayıtları filtrele - HATA AYIKLAMA İLE
-    if yasakli_df is not None and not yasakli_df.empty:
-        st.info("🚫 Yasaklı mağaza-ürün kombinasyonları filtreleniyor...")
-        
-        try:
-            # Önce veri tiplerini kontrol et
-            st.write("🔍 Veri tipleri kontrol ediliyor...")
-            sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
-            sevk_df['urun_id'] = sevk_df['urun_id'].astype(str).str.strip()
-            
-            # Orijinal verideki yasaklı kayıt sayısı
-            original_count = len(sevk_df)
-            st.write(f"🔍 Filtreleme öncesi: {original_count} kayıt")
-            
-            # Yasaklı kayıtları bul
-            yasakli_kayitlar = []
-            for idx, row in sevk_df.iterrows():
-                if is_yasakli(row['magaza_id'], row['urun_id'], yasakli_df):
-                    yasakli_kayitlar.append(idx)
-            
-            st.write(f"🔍 Bulunan yasaklı kayıt sayısı: {len(yasakli_kayitlar)}")
-            
-            # Yasaklıları filtrele
-            if yasakli_kayitlar:
-                sevk_df = sevk_df.drop(yasakli_kayitlar).copy()
-            
-            # Filtrelenmiş kayıt sayısı
-            filtered_count = len(sevk_df)
-            yasakli_count = original_count - filtered_count
-            
-            # Session state'e kaydet
-            st.session_state.yasakli_kayit_sayisi = yasakli_count
-            
-            st.success(f"✅ {yasakli_count} yasaklı kayıt filtrelendi. {filtered_count} kayıt işlenecek.")
-            
-            # Orijinal df'te de aynı filtreleme (alım ihtiyacı için)
-            original_sevkiyat_df['magaza_id'] = original_sevkiyat_df['magaza_id'].astype(str).str.strip()
-            original_sevkiyat_df['urun_id'] = original_sevkiyat_df['urun_id'].astype(str).str.strip()
-            
-            yasakli_kayitlar_original = []
-            for idx, row in original_sevkiyat_df.iterrows():
-                if is_yasakli(row['magaza_id'], row['urun_id'], yasakli_df):
-                    yasakli_kayitlar_original.append(idx)
-            
-            if yasakli_kayitlar_original:
-                original_sevkiyat_df = original_sevkiyat_df.drop(yasakli_kayitlar_original).copy()
-                
-        except Exception as e:
-            st.error(f"❌ Yasak filtreleme hatası: {str(e)}")
-            st.info("ℹ️ Yasaklar uygulanamadı, tüm kayıtlar işlenecek")
-            st.session_state.yasakli_kayit_sayisi = 0
-    else:
-        st.session_state.yasakli_kayit_sayisi = 0
-        st.info("ℹ️ Yasak dosyası bulunamadı veya boş, tüm kayıtlar işlenecek")
-    
-    # ... (kalan kod aynı)
+        st.error(f"❌ Yasak uygulama hatası: {str(e)}")
+        return sevk_df, 0
 
 # -------------------------------
 # COVER GRUPLARI ve MATRİS YÖNETİMİ (DÜZELTMELİ)
@@ -766,9 +657,6 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
     if sevk_df is None or depo_stok_df is None:
         raise Exception("Zorunlu dosyalar (Sevkiyat.csv, Depo_Stok.csv) eksik!")
     
-    # Yasakları yükle
-    yasakli_df = load_yasaklar(file_data)
-    
     # Orijinal sevkiyat df'ini kaydet (alım ihtiyacı için)
     original_sevkiyat_df = sevk_df.copy()
     
@@ -776,34 +664,6 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
     sevk_df = normalize_columns(sevk_df)
     depo_stok_df = normalize_columns(depo_stok_df)
     original_sevkiyat_df = normalize_columns(original_sevkiyat_df)
-    
-    # YENİ: Yasaklı kayıtları filtrele
-    if yasakli_df is not None and not yasakli_df.empty:
-        st.info("🚫 Yasaklı mağaza-ürün kombinasyonları filtreleniyor...")
-        
-        # Filtreleme fonksiyonu
-        def filter_yasakli(row):
-            return not is_yasakli(row['magaza_id'], row['urun_id'], yasakli_df)
-        
-        # Orijinal verideki yasaklı kayıt sayısı
-        original_count = len(sevk_df)
-        
-        # Yasaklıları filtrele
-        sevk_df = sevk_df[sevk_df.apply(filter_yasakli, axis=1)].copy()
-        
-        # Filtrelenmiş kayıt sayısı
-        filtered_count = len(sevk_df)
-        yasakli_count = original_count - filtered_count
-        
-        # Session state'e kaydet
-        st.session_state.yasakli_kayit_sayisi = yasakli_count
-        
-        st.success(f"✅ {yasakli_count} yasaklı kayıt filtrelendi. {filtered_count} kayıt işlenecek.")
-        
-        # Orijinal df'te de aynı filtreleme (alım ihtiyacı için)
-        original_sevkiyat_df = original_sevkiyat_df[original_sevkiyat_df.apply(filter_yasakli, axis=1)].copy()
-    else:
-        st.session_state.yasakli_kayit_sayisi = 0
     
     # Zorunlu kolon kontrolü
     required_sevk = ['depo_id', 'urun_id', 'magaza_id', 'haftalik_satis', 'mevcut_stok', 'klasmankod']
@@ -942,11 +802,18 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
         (df_filtered["mevcut_stok"] + df_filtered["yolda"])
     ).clip(lower=0)
     
+    # YENİ: YASAKLI KAYITLARIN İHTİYACINI 0 YAP
+    df_filtered, yasakli_count = apply_yasaklar_to_ihtiyac(df_filtered, file_data)
+    st.session_state.yasakli_kayit_sayisi = yasakli_count
+    
     # Orijinal df'e ihtiyaç ekle - YOLDA STOĞU EKLE (doğru olan bu)
     original_sevkiyat_df["ihtiyac"] = (
         (original_sevkiyat_df["haftalik_satis"] * original_sevkiyat_df['hedef_hafta']) - 
         (original_sevkiyat_df["mevcut_stok"] + original_sevkiyat_df['yolda'])
     ).clip(lower=0)
+    
+    # Orijinal df'te de yasakları uygula
+    original_sevkiyat_df, _ = apply_yasaklar_to_ihtiyac(original_sevkiyat_df, file_data)
     
     # Sıralama - YENİ: Önce ürün cover'a göre sırala
     df_sorted = df_filtered.sort_values(by=["urun_id", "urun_cover", "haftalik_satis"], ascending=[True, True, False]).copy()
@@ -1050,6 +917,10 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
                     MAKS_SEVK = row["maks_adet"]
                     ihtiyac = row["ihtiyac"]
                     
+                    # EĞER İHTİYAÇ 0 İSE (YASAKLIYSA) ATLA
+                    if ihtiyac <= 0:
+                        continue
+                    
                     ihtiyac_carpanli = ihtiyac * carpan
                     
                     sevk = int(min(ihtiyac_carpanli, stok, MAKS_SEVK)) if stok > 0 and ihtiyac_carpanli > 0 else 0
@@ -1150,6 +1021,7 @@ def calculate_shipment_optimized(file_data, params, cover_gruplari):
         st.write(f"   - Min tamamlama (Tur2): {min_tamamlama:,} adet")
         st.write(f"   - Min yüzdesi: {min_yuzde:.1f}%")
         st.write(f"   - Toplam işlem: {len(sevk_listesi)} sevkiyat kaydı")
+        st.write(f"   - Yasaklı kayıt: {yasakli_count} adet")
         
     else:
         sevk_df_result = pd.DataFrame()
@@ -1541,11 +1413,8 @@ def show_main_page():
                         break
                 
                 if yasaklar_df is not None:
-                    yasakli_df = load_yasaklar(st.session_state.file_data)
-                    if yasakli_df is not None:
-                        st.write("🚫 Yasaklı Mağaza-Ürün Kombinasyonları:")
-                        st.dataframe(yasakli_df.head(10), use_container_width=True)
-                        st.write(f"Toplam {len(yasakli_df)} yasaklı kombinasyon")
+                    st.write("🚫 Yasaklar dosyası önizleme:")
+                    st.dataframe(yasaklar_df.head(10), use_container_width=True)
         
         # Parametre bilgilerini göster
         st.info(f"🔧 Kullanılacak parametreler: Hedef Hafta={st.session_state.params['hedef_hafta']}, Min Adet={st.session_state.params['min_adet']}, Maks Adet={st.session_state.params['maks_adet']}")
@@ -1688,5 +1557,4 @@ def main():
         show_reports()
 
 if __name__ == "__main__":
-
     main()
