@@ -611,7 +611,6 @@ def calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok
 # -------------------------------
 # ANA HESAPLAMA FONKSİYONU (DÜZELTMELİ YENİ SİSTEM)
 # -------------------------------
-
 def calculate_shipment_optimized(file_data, params, cover_gruplari):
     # Dosyaları yükle
     sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df = None, None, None, None, None, None
@@ -1466,4 +1465,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
