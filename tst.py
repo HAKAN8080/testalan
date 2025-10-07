@@ -208,7 +208,6 @@ def safe_get_carpan(magaza_cover_grubu: str, urun_cover_grubu: str) -> float:
 # -------------------------------
 # ALIM SİPARİŞ İHTİYACI HESAPLAMA (DÜZELTİLMİŞ)
 # -------------------------------
-
 def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame, 
                            original_sevkiyat_df: pd.DataFrame, depo_stok_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -288,6 +287,12 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
                 logger.error(f"Alım çarpanı alma hatası: {e}")
                 return 1.0
         
+        # Cover grupları yoksa ekle
+        if 'magaza_cover_grubu' not in alim_siparis_df.columns:
+            alim_siparis_df['magaza_cover_grubu'] = '0-4'
+        if 'urun_cover_grubu' not in alim_siparis_df.columns:
+            alim_siparis_df['urun_cover_grubu'] = '0-4'
+        
         # Alım çarpanını uygula
         alim_siparis_df['alim_carpan'] = alim_siparis_df.apply(
             lambda row: get_alim_carpan(
@@ -301,7 +306,7 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
             alim_siparis_df['kalan_ihtiyac'] * alim_siparis_df['alim_carpan']
         ).clip(lower=0)
 
-        # Ürün bazında toplam alım siparişi
+        # ÖNEMLİ: Ürün bazında toplam alım siparişi - alim_carpan KORUNMALI
         alim_siparis_toplam = alim_siparis_df.groupby(
             ["depo_id", "urun_id", "klasmankod"], as_index=False
         ).agg({
@@ -310,9 +315,9 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
             'ihtiyac': 'sum',
             'depo_stok': 'first',
             'haftalik_satis': 'mean',
-            'alim_carpan': 'mean',
-            'magaza_cover_grubu': 'first',
-            'urun_cover_grubu': 'first'
+            'alim_carpan': 'mean',  # ← BURADA KORUNUYOR
+            'magaza_cover_grubu': lambda x: x.mode()[0] if len(x) > 0 else '0-4',
+            'urun_cover_grubu': lambda x: x.mode()[0] if len(x) > 0 else '0-4'
         })
 
         # Ürün adını ekle
@@ -349,7 +354,6 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
         import traceback
         st.error(traceback.format_exc())
         return pd.DataFrame()
-
 # -------------------------------
 # COVER GRUPLARI VE MATRİS YÖNETİMİ
 # -------------------------------
@@ -1565,18 +1569,21 @@ def show_reports():
             
             st.dataframe(urun_grup_analiz, use_container_width=True)
     
-    # Tab 4: Alım İhtiyacı (GÜNCELLENMİŞ)
-    with tab4:
-        st.subheader("🛒 Alım Sipariş İhtiyacı")
+    # Tab 4: Alım İhtiyacı (GÜVENLİ VERSİYON)
+with tab4:
+    st.subheader("🛒 Alım Sipariş İhtiyacı")
+    
+    # Alım ihtiyacını hesapla
+    alim_ihtiyaci = calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok_df)
+    
+    if not alim_ihtiyaci.empty:
+        # Özet metrikler - GÜVENLİ KONTROL
+        toplam_ihtiyac = alim_ihtiyaci['alim_siparis_miktari'].sum()
+        urun_cesidi = len(alim_ihtiyaci)
+        ortalama_cover = alim_ihtiyaci['toplam_ihtiyac_cover'].mean()
         
-        # Alım ihtiyacını hesapla
-        alim_ihtiyaci = calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok_df)
-        
-        if not alim_ihtiyaci.empty:
-            # Özet metrikler
-            toplam_ihtiyac = alim_ihtiyaci['alim_siparis_miktari'].sum()
-            urun_cesidi = len(alim_ihtiyaci)
-            ortalama_cover = alim_ihtiyaci['toplam_ihtiyac_cover'].mean()
+        # Alım çarpanı varsa göster, yoksa atla
+        if 'alim_carpan' in alim_ihtiyaci.columns:
             ortalama_carpan = alim_ihtiyaci['alim_carpan'].mean()
             
             col1, col2, col3, col4 = st.columns(4)
@@ -1584,10 +1591,16 @@ def show_reports():
             col2.metric("Ürün Çeşidi", f"{urun_cesidi}")
             col3.metric("Ort. Cover İhtiyacı", f"{ortalama_cover:.1f} hafta")
             col4.metric("Ort. Alım Çarpanı", f"{ortalama_carpan:.2f}")
-            
-            st.success(f"✅ {urun_cesidi} ürün için toplam {toplam_ihtiyac:,.0f} adet alım sipariş talebi oluştu")
-            
-            # Alım matrisi etkisi
+        else:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Toplam Alım İhtiyacı", f"{toplam_ihtiyac:,.0f} adet")
+            col2.metric("Ürün Çeşidi", f"{urun_cesidi}")
+            col3.metric("Ort. Cover İhtiyacı", f"{ortalama_cover:.1f} hafta")
+        
+        st.success(f"✅ {urun_cesidi} ürün için toplam {toplam_ihtiyac:,.0f} adet alım sipariş talebi oluştu")
+        
+        # Alım matrisi etkisi - GÜVENLİ KONTROL
+        if 'alim_carpan' in alim_ihtiyaci.columns and 'magaza_cover_grubu' in alim_ihtiyaci.columns:
             with st.expander("📊 Alım Matrisi Etkisi"):
                 st.write("**Alım çarpanının etkisi:**")
                 etki_df = alim_ihtiyaci.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
@@ -1596,97 +1609,104 @@ def show_reports():
                     'alim_carpan': 'mean'
                 }).reset_index()
                 
-                etki_df['carpan_etkisi'] = (
+                etki_df['carpan_etkisi_%'] = (
                     (etki_df['alim_siparis_miktari'] - etki_df['kalan_ihtiyac']) / 
                     etki_df['kalan_ihtiyac'] * 100
                 ).round(1)
                 
                 st.dataframe(etki_df, use_container_width=True)
-            
-            # Ürün × Depo Pivot Tablosu
-            st.subheader("📊 Ürün Bazlı Depo Dağılımı")
-            
-            # Pivot tablo oluştur
-            pivot_alim = alim_ihtiyaci.pivot_table(
-                index=['urun_id', 'urun_adi'],
-                columns='depo_id',
-                values='alim_siparis_miktari',
-                aggfunc='sum',
-                fill_value=0
-            ).reset_index()
-            
-            # Toplam sütunu ekle
-            numeric_cols = [col for col in pivot_alim.columns if col not in ['urun_id', 'urun_adi']]
-            pivot_alim['TOPLAM'] = pivot_alim[numeric_cols].sum(axis=1)
-            
-            # Sütun isimlerini düzenle
-            depo_columns = [col for col in pivot_alim.columns if str(col).replace('.', '').isdigit()]
-            rename_dict = {col: f"Depo_{col}" for col in depo_columns}
-            pivot_alim = pivot_alim.rename(columns=rename_dict)
-            
-            # Toplam satırı ekle
-            toplam_row = {'urun_id': 'TOPLAM', 'urun_adi': 'TOPLAM'}
-            for col in pivot_alim.columns:
-                if col not in ['urun_id', 'urun_adi']:
-                    toplam_row[col] = pivot_alim[col].sum()
-            
-            pivot_with_totals = pd.concat([pivot_alim, pd.DataFrame([toplam_row])], ignore_index=True)
-            
-            # Tabloyu göster
-            def highlight_totals(row):
-                if row['urun_id'] == 'TOPLAM':
-                    return ['background-color: #2E86AB; color: white; font-weight: bold'] * len(row)
-                return [''] * len(row)
-            
-            numeric_columns = [col for col in pivot_with_totals.columns if col not in ['urun_id', 'urun_adi']]
-            styled_pivot = pivot_with_totals.style.format(
-                "{:,.0f}", 
-                subset=numeric_columns
-            ).apply(highlight_totals, axis=1)
-            
-            st.dataframe(styled_pivot, use_container_width=True)
-            
-            # Depo bazlı toplamları da göster
-            st.write("**Depo Bazlı Toplamlar:**")
-            depo_cols = [col for col in pivot_alim.columns if col.startswith('Depo_')]
-            depo_toplam_data = []
-            for col in depo_cols:
-                depo_toplam_data.append({
-                    'Depo': col.replace('Depo_', 'Depo '),
-                    'Toplam İhtiyaç': f"{pivot_alim[col].sum():,.0f}"
-                })
-            
+        
+        # Ürün × Depo Pivot Tablosu
+        st.subheader("📊 Ürün Bazlı Depo Dağılımı")
+        
+        # Pivot tablo oluştur
+        pivot_alim = alim_ihtiyaci.pivot_table(
+            index=['urun_id', 'urun_adi'],
+            columns='depo_id',
+            values='alim_siparis_miktari',
+            aggfunc='sum',
+            fill_value=0
+        ).reset_index()
+        
+        # Toplam sütunu ekle
+        numeric_cols = [col for col in pivot_alim.columns if col not in ['urun_id', 'urun_adi']]
+        pivot_alim['TOPLAM'] = pivot_alim[numeric_cols].sum(axis=1)
+        
+        # Sütun isimlerini düzenle
+        depo_columns = [col for col in pivot_alim.columns if str(col).replace('.', '').replace('-', '').isdigit()]
+        rename_dict = {col: f"Depo_{col}" for col in depo_columns}
+        pivot_alim = pivot_alim.rename(columns=rename_dict)
+        
+        # Toplam satırı ekle
+        toplam_row = {'urun_id': 'TOPLAM', 'urun_adi': 'TOPLAM'}
+        for col in pivot_alim.columns:
+            if col not in ['urun_id', 'urun_adi']:
+                toplam_row[col] = pivot_alim[col].sum()
+        
+        pivot_with_totals = pd.concat([pivot_alim, pd.DataFrame([toplam_row])], ignore_index=True)
+        
+        # Tabloyu göster
+        def highlight_totals(row):
+            if row['urun_id'] == 'TOPLAM':
+                return ['background-color: #2E86AB; color: white; font-weight: bold'] * len(row)
+            return [''] * len(row)
+        
+        numeric_columns = [col for col in pivot_with_totals.columns if col not in ['urun_id', 'urun_adi']]
+        styled_pivot = pivot_with_totals.style.format(
+            "{:,.0f}", 
+            subset=numeric_columns
+        ).apply(highlight_totals, axis=1)
+        
+        st.dataframe(styled_pivot, use_container_width=True)
+        
+        # Depo bazlı toplamları da göster
+        st.write("**Depo Bazlı Toplamlar:**")
+        depo_cols = [col for col in pivot_alim.columns if col.startswith('Depo_')]
+        depo_toplam_data = []
+        for col in depo_cols:
+            depo_toplam_data.append({
+                'Depo': col.replace('Depo_', 'Depo '),
+                'Toplam İhtiyaç': f"{pivot_alim[col].sum():,.0f}"
+            })
+        
+        if depo_toplam_data:
             depo_toplam_df = pd.DataFrame(depo_toplam_data)
             st.dataframe(depo_toplam_df, use_container_width=True)
+        
+        # Detaylı liste - GÜVENLİ KONTROL
+        with st.expander("📋 Detaylı Alım Listesi"):
+            display_cols = ['depo_id', 'urun_id', 'urun_adi', 'klasmankod', 'kalan_ihtiyac', 'alim_siparis_miktari']
             
-            # Detaylı liste
-            with st.expander("📋 Detaylı Alım Listesi"):
-                st.dataframe(
-                    alim_ihtiyaci[[
-                        'depo_id', 'urun_id', 'urun_adi', 'klasmankod',
-                        'kalan_ihtiyac', 'alim_carpan', 'alim_siparis_miktari',
-                        'magaza_cover_grubu', 'urun_cover_grubu',
-                        'toplam_ihtiyac_cover'
-                    ]],
-                    use_container_width=True
-                )
+            # Opsiyonel kolonları ekle
+            if 'alim_carpan' in alim_ihtiyaci.columns:
+                display_cols.insert(5, 'alim_carpan')
+            if 'magaza_cover_grubu' in alim_ihtiyaci.columns:
+                display_cols.append('magaza_cover_grubu')
+            if 'urun_cover_grubu' in alim_ihtiyaci.columns:
+                display_cols.append('urun_cover_grubu')
+            if 'toplam_ihtiyac_cover' in alim_ihtiyaci.columns:
+                display_cols.append('toplam_ihtiyac_cover')
             
-            # İndirme butonu
-            csv_alim = alim_ihtiyaci.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button(
-                "📥 Alım İhtiyacını İndir",
-                csv_alim,
-                "alim_siparis_ihtiyaci.csv",
-                "text/csv",
-                use_container_width=True
-            )
-                
-        else:
-            st.info("ℹ️ Alım ihtiyacı bulunmamaktadır.")
-            st.write("**Olası sebepler:**")
-            st.write("- Tüm ihtiyaçlar sevkiyatla karşılandı")
-            st.write("- Depoda yeterli stok var")
-            st.write("- Hesaplama sırasında filtreleme yapıldı")
+            # Sadece mevcut kolonları göster
+            available_cols = [col for col in display_cols if col in alim_ihtiyaci.columns]
+            st.dataframe(alim_ihtiyaci[available_cols], use_container_width=True)
+        
+        # İndirme butonu
+        csv_alim = alim_ihtiyaci.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            "📥 Alım İhtiyacını İndir",
+            csv_alim,
+            "alim_siparis_ihtiyaci.csv",
+            "text/csv",
+            use_container_width=True
+        )
+            
+    else:
+        st.info("ℹ️ Alım ihtiyacı bulunmamaktadır.")
+        st.write("**Olası sebepler:**")
+        st.write("- Tüm ihtiyaçlar sevkiyatla karşılandı")
+        st.write("- Depoda yeterli stok var")
+        st.write("- Hesaplama sırasında filtreleme yapıldı")
     
     # Tab 5: Matris Analizi
     with tab5:
@@ -1945,4 +1965,5 @@ if __name__ == "__main__":
 
 
     
+
 
