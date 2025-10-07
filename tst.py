@@ -1496,10 +1496,225 @@ def show_reports():
         else:
             st.info("Mağaza analizi için veri yok")
             
-    # TAB 3: Ürün
+# TAB 3: Ürün Analizi - EKSİKSİZ
     with tab3:
         st.subheader("📦 Ürün Analizi")
-        st.info("Ürün detayları")
+        
+        if not total_sevk.empty:
+            # Ürün bazlı özet
+            urun_analiz = total_sevk.groupby(['urun_id', 'urun_cover_grubu', 'klasmankod']).agg({
+                'sevk_miktar': 'sum',
+                'ihtiyac': 'sum',
+                'magaza_id': 'nunique',
+                'haftalik_satis': 'sum',
+                'urun_cover': 'first',
+                'mevcut_stok': 'sum',
+                'yolda': 'sum'
+            }).reset_index()
+            
+            urun_analiz.columns = ['urun_id', 'urun_cover_grubu', 'klasmankod', 'sevk_miktar', 
+                                   'ihtiyac', 'magaza_sayisi', 'haftalik_satis', 'urun_cover',
+                                   'toplam_mevcut_stok', 'toplam_yolda']
+            
+            # Ürün adı ekle
+            if not urunler_df.empty:
+                urunler_df_copy = urunler_df.copy()
+                urunler_df_copy['urun_id'] = urunler_df_copy['urun_id'].astype(str).str.strip()
+                urun_analiz['urun_id'] = urun_analiz['urun_id'].astype(str).str.strip()
+                if 'urun_adi' in urunler_df_copy.columns:
+                    urun_analiz = pd.merge(
+                        urun_analiz,
+                        urunler_df_copy[['urun_id', 'urun_adi']],
+                        on='urun_id',
+                        how='left'
+                    )
+                    # Sütun sırasını düzenle
+                    cols = ['urun_id', 'urun_adi'] + [col for col in urun_analiz.columns if col not in ['urun_id', 'urun_adi']]
+                    urun_analiz = urun_analiz[cols]
+            
+            # Hesaplamalar
+            urun_analiz['magaza_basi_sevk'] = (
+                urun_analiz['sevk_miktar'] / urun_analiz['magaza_sayisi']
+            ).round(1)
+            
+            urun_analiz['ihtiyac_karsilama_%'] = (
+                (urun_analiz['sevk_miktar'] / urun_analiz['ihtiyac'] * 100)
+                .fillna(0)
+                .replace([np.inf, -np.inf], 0)
+                .round(1)
+            )
+            
+            urun_analiz['sevk_satis_orani'] = (
+                urun_analiz['sevk_miktar'] / urun_analiz['haftalik_satis']
+            ).fillna(0).round(2)
+            
+            urun_analiz['stok_sonrasi'] = (
+                urun_analiz['toplam_mevcut_stok'] + urun_analiz['sevk_miktar']
+            )
+            
+            # Sıralama
+            urun_analiz = urun_analiz.sort_values('sevk_miktar', ascending=False)
+            
+            # Genel Özet
+            st.write("**📊 Ürün Özet İstatistikleri:**")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Toplam Ürün", len(urun_analiz))
+            col2.metric("Ortalama Sevkiyat", f"{urun_analiz['sevk_miktar'].mean():,.0f}")
+            col3.metric("En Yüksek Sevkiyat", f"{urun_analiz['sevk_miktar'].max():,.0f}")
+            col4.metric("Ort. Mağaza Sayısı", f"{urun_analiz['magaza_sayisi'].mean():.0f}")
+            
+            st.markdown("---")
+            
+            # Filtreler
+            st.write("**🔍 Filtreler:**")
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+            
+            with filter_col1:
+                urun_cover_filter = st.multiselect(
+                    "Ürün Cover Grubu",
+                    options=urun_analiz['urun_cover_grubu'].unique(),
+                    default=None,
+                    key="urun_cover_filter"
+                )
+            
+            with filter_col2:
+                klasman_filter = st.multiselect(
+                    "Klasman Kodu",
+                    options=sorted(urun_analiz['klasmankod'].unique()),
+                    default=None,
+                    key="klasman_filter"
+                )
+            
+            with filter_col3:
+                urun_arama = st.text_input("Ürün Ara (ID veya Ad)", key="urun_arama")
+            
+            # Filtreleme
+            filtered_urun = urun_analiz.copy()
+            
+            if urun_cover_filter:
+                filtered_urun = filtered_urun[filtered_urun['urun_cover_grubu'].isin(urun_cover_filter)]
+            
+            if klasman_filter:
+                filtered_urun = filtered_urun[filtered_urun['klasmankod'].isin(klasman_filter)]
+            
+            if urun_arama:
+                if 'urun_adi' in filtered_urun.columns:
+                    filtered_urun = filtered_urun[
+                        filtered_urun['urun_id'].astype(str).str.contains(urun_arama, case=False) |
+                        filtered_urun['urun_adi'].astype(str).str.contains(urun_arama, case=False, na=False)
+                    ]
+                else:
+                    filtered_urun = filtered_urun[
+                        filtered_urun['urun_id'].astype(str).str.contains(urun_arama, case=False)
+                    ]
+            
+            st.write(f"**📋 Ürün Detayları ({len(filtered_urun)} ürün - İlk 100):**")
+            
+            # Renkli gösterim
+            def highlight_low_stock(row):
+                if row['urun_cover'] < 4:
+                    return ['background-color: #fee2e2'] * len(row)
+                elif row['urun_cover'] < 8:
+                    return ['background-color: #fef3c7'] * len(row)
+                else:
+                    return [''] * len(row)
+            
+            display_urun = filtered_urun.head(100)
+            
+            styled_urun = display_urun.style\
+                .format({
+                    'sevk_miktar': '{:,.0f}',
+                    'ihtiyac': '{:,.0f}',
+                    'magaza_sayisi': '{:,.0f}',
+                    'haftalik_satis': '{:,.0f}',
+                    'urun_cover': '{:.1f}',
+                    'toplam_mevcut_stok': '{:,.0f}',
+                    'toplam_yolda': '{:,.0f}',
+                    'magaza_basi_sevk': '{:.1f}',
+                    'ihtiyac_karsilama_%': '{:.1f}%',
+                    'sevk_satis_orani': '{:.2f}',
+                    'stok_sonrasi': '{:,.0f}'
+                })\
+                .apply(highlight_low_stock, axis=1)
+            
+            st.dataframe(styled_urun, use_container_width=True, hide_index=True)
+            
+            if len(filtered_urun) > 100:
+                st.info(f"ℹ️ Toplam {len(filtered_urun)} ürün var, ilk 100 gösteriliyor. Tümü için CSV indir.")
+            
+            # Ürün Cover Grubu Analizi
+            st.markdown("---")
+            st.subheader("📊 Ürün Cover Grubu Bazlı Analiz")
+            
+            urun_grup_analiz = urun_analiz.groupby('urun_cover_grubu').agg({
+                'urun_id': 'nunique',
+                'sevk_miktar': 'sum',
+                'ihtiyac': 'sum',
+                'magaza_sayisi': 'sum',
+                'haftalik_satis': 'sum',
+                'urun_cover': 'mean'
+            }).reset_index()
+            
+            urun_grup_analiz.columns = ['Cover Grubu', 'Ürün Sayısı', 'Toplam Sevkiyat', 
+                                        'Toplam İhtiyaç', 'Toplam Mağaza', 'Toplam Satış', 'Ort. Cover']
+            
+            urun_grup_analiz['Ürün Başı Sevk'] = (
+                urun_grup_analiz['Toplam Sevkiyat'] / urun_grup_analiz['Ürün Sayısı']
+            ).round(1)
+            
+            urun_grup_analiz['İhtiyaç Karşılama %'] = (
+                (urun_grup_analiz['Toplam Sevkiyat'] / urun_grup_analiz['Toplam İhtiyaç'] * 100)
+                .fillna(0)
+                .replace([np.inf, -np.inf], 0)
+                .round(1)
+            )
+            
+            st.dataframe(
+                urun_grup_analiz.style.format({
+                    'Ürün Sayısı': '{:,.0f}',
+                    'Toplam Sevkiyat': '{:,.0f}',
+                    'Toplam İhtiyaç': '{:,.0f}',
+                    'Toplam Mağaza': '{:,.0f}',
+                    'Toplam Satış': '{:,.0f}',
+                    'Ort. Cover': '{:.1f}',
+                    'Ürün Başı Sevk': '{:.1f}',
+                    'İhtiyaç Karşılama %': '{:.1f}%'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Top 20 Ürünler
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**🏆 En Çok Sevk Edilen Ürünler (Top 20):**")
+                top20 = filtered_urun.head(20)[['urun_id'] + 
+                    (['urun_adi'] if 'urun_adi' in filtered_urun.columns else []) +
+                    ['sevk_miktar', 'magaza_sayisi', 'urun_cover_grubu']]
+                st.dataframe(top20, use_container_width=True, hide_index=True)
+            
+            with col2:
+                st.write("**⚠️ Düşük Cover Ürünler (Cover < 4):**")
+                dusuk_cover = filtered_urun[filtered_urun['urun_cover'] < 4].head(20)[['urun_id'] + 
+                    (['urun_adi'] if 'urun_adi' in filtered_urun.columns else []) +
+                    ['urun_cover', 'sevk_miktar', 'ihtiyac']]
+                if not dusuk_cover.empty:
+                    st.dataframe(dusuk_cover, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Düşük cover'lı ürün yok")
+            
+            # İndirme
+            csv_urun = filtered_urun.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📥 Ürün Analizini İndir",
+                csv_urun,
+                "urun_analizi.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("Ürün analizi için veri yok")
     
     # TAB 4: Alım
     with tab4:
@@ -1649,4 +1864,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
