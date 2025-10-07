@@ -714,7 +714,7 @@ def manage_cover_groups_and_matrix():
     st.markdown("---")
     
     # 3 Matris Düzenleme
-    tab1, tab2, tab3 = st.tabs(["🚚 Sevkiyat (TUR 1)", "🔧 Min Tamamlama (TUR 2)", "🛒 Alım Matrisi"])
+    tab1, tab2, tab3 = st.tabs(["🚚 RPT Sevkiyat", "🔧 Min Tamamlama", "🛒 Alım Matrisi"])
     
     cover_gruplari_etiketler = [g['etiket'] for g in st.session_state.cover_gruplari_edited]
     
@@ -765,8 +765,7 @@ def manage_cover_groups_and_matrix():
         st.warning("""
         ⚠️ **Önemli:**
         - Çarpan 0 = Tamamlama yapma
-        - **Eski:** `if cover >= 12: skip`
-        - **Yeni:** `if min_carpan == 0: skip`
+        - Hızlı mağaza gruplarında min*çarpan kadar genişletme yapılır
         """)
         
         min_matrix_data = {}
@@ -1864,6 +1863,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
