@@ -82,7 +82,7 @@ def get_cover_grubu_adi(cover_value, cover_gruplari):
     except:
         return "20+"
 
-vdef apply_yasaklar_to_ihtiyac(sevk_df, file_data):
+def apply_yasaklar_to_ihtiyac(sevk_df, file_data):
     """İhtiyaç hesaplamasında yasaklıları 0'a çek - ÇOK BASİT VERSİYON"""
     
     try:
@@ -1543,4 +1543,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
