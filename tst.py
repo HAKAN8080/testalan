@@ -82,61 +82,46 @@ def get_cover_grubu_adi(cover_value, cover_gruplari):
     except:
         return "20+"
 
-def apply_yasaklar_to_ihtiyac(sevk_df, file_data):
-    """İhtiyaç hesaplamasında yasaklıları 0'a çek"""
-    
-    # Yasakları yükle
-    yasaklar_df = None
-    for name, df in file_data.items():
-        if "yasak" in name.lower():
-            yasaklar_df = df.copy()
-            break
-    
-    if yasaklar_df is None or yasaklar_df.empty:
-        return sevk_df, 0
+vdef apply_yasaklar_to_ihtiyac(sevk_df, file_data):
+    """İhtiyaç hesaplamasında yasaklıları 0'a çek - ÇOK BASİT VERSİYON"""
     
     try:
-        # Yasakları normalize et
-        yasaklar_df = normalize_columns(yasaklar_df)
-        yasaklar_df['magaza_id'] = yasaklar_df['magaza_id'].astype(str).str.strip()
-        yasaklar_df['urun_id'] = yasaklar_df['urun_id'].astype(str).str.strip()
-        yasaklar_df['yasak'] = pd.to_numeric(yasaklar_df['yasak'], errors='coerce').fillna(0)
+        # Yasakları yükle
+        yasaklar_df = None
+        for name, df in file_data.items():
+            if "yasak" in name.lower():
+                yasaklar_df = df.copy()
+                break
         
-        # Sadece yasaklı olanları al
-        yasakli_df = yasaklar_df[yasaklar_df['yasak'] == 1]
-        
-        if yasakli_df.empty:
+        if yasaklar_df is None or yasaklar_df.empty:
             return sevk_df, 0
         
-        # Sevkiyat verisini hazırla
-        sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
-        sevk_df['urun_id'] = sevk_df['urun_id'].astype(str).str.strip()
+        # ÇOK BASİT: Sadece yasaklıları bul ve ihtiyacı 0 yap
+        yasakli_count = 0
         
-        # Yasaklı kombinasyonları bul
-        yasakli_kombinasyonlar = yasakli_df[['magaza_id', 'urun_id']].drop_duplicates()
-        
-        # Yasaklı kayıtları bul
-        yasakli_kayitlar = sevk_df.merge(
-            yasakli_kombinasyonlar, 
-            on=['magaza_id', 'urun_id'], 
-            how='inner'
-        )
-        
-        yasakli_count = len(yasakli_kayitlar)
+        for idx, row in sevk_df.iterrows():
+            magaza_id = str(row['magaza_id']).strip()
+            urun_id = str(row['urun_id']).strip()
+            
+            # Bu mağaza-ürün kombinasyonu yasaklı mı?
+            yasak_var = yasaklar_df[
+                (yasaklar_df['magaza_id'].astype(str).str.strip() == magaza_id) & 
+                (yasaklar_df['urun_id'].astype(str).str.strip() == urun_id) &
+                (yasaklar_df['yasak'].astype(int) == 1)
+            ]
+            
+            if len(yasak_var) > 0:
+                sevk_df.at[idx, 'ihtiyac'] = 0
+                yasakli_count += 1
         
         if yasakli_count > 0:
-            # Yasaklı kayıtların index'lerini bul
-            yasakli_indexes = yasakli_kayitlar.index
-            
-            # İHTİYAÇ'ı 0 yap - BÖYLECE SEVKİYAT HİÇ OLUŞMAZ
-            sevk_df.loc[yasakli_indexes, 'ihtiyac'] = 0
-            
             st.success(f"🚫 {yasakli_count} yasaklı kaydın ihtiyacı 0'a çekildi")
         
         return sevk_df, yasakli_count
         
     except Exception as e:
         st.error(f"❌ Yasak uygulama hatası: {str(e)}")
+        # Hata durumunda orijinal dataframe'i döndür
         return sevk_df, 0
 
 # -------------------------------
@@ -1558,3 +1543,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
