@@ -61,6 +61,15 @@ class Config:
         "13-20": {"0-4": 1.0, "5-8": 1.0, "9-12": 1.0, "13-20": 0, "20+": 0},
         "20+": {"0-4": 1.0, "5-8": 0, "9-12": 0, "13-20": 0, "20+": 0}
     }
+    
+    # Varsayılan MIN TAMAMLAMA matrisi (YENİ)
+    DEFAULT_MIN_TAMAMLAMA_MATRIX = {
+        "0-4": {"0-4": 1.2, "5-8": 1.1, "9-12": 1.0, "13-20": 0.8, "20+": 0},
+        "5-8": {"0-4": 1.1, "5-8": 1.0, "9-12": 0.9, "13-20": 0.5, "20+": 0},
+        "9-12": {"0-4": 1.0, "5-8": 0.9, "9-12": 0.8, "13-20": 0, "20+": 0},
+        "13-20": {"0-4": 0.8, "5-8": 0.5, "9-12": 0, "13-20": 0, "20+": 0},
+        "20+": {"0-4": 0, "5-8": 0, "9-12": 0, "13-20": 0, "20+": 0}
+    }
 
 # -------------------------------
 # YARDIMCI FONKSIYONLAR - VERİ İŞLEME
@@ -187,7 +196,7 @@ def get_cover_grubu_adi(cover_value: float, cover_gruplari: List[Dict]) -> str:
         return "20+"
 
 def safe_get_carpan(magaza_cover_grubu: str, urun_cover_grubu: str) -> float:
-    """Güvenli çarpan alma"""
+    """Güvenli çarpan alma (Sevkiyat - TUR 1)"""
     try:
         carpan_matrisi = st.session_state.get('carpan_matrisi', {})
         
@@ -205,9 +214,29 @@ def safe_get_carpan(magaza_cover_grubu: str, urun_cover_grubu: str) -> float:
         logger.error(f"Çarpan alma hatası: {e}", exc_info=True)
         return Config.DEFAULT_CARPAN
 
+def safe_get_min_carpan(magaza_cover_grubu: str, urun_cover_grubu: str) -> float:
+    """Min tamamlama çarpanını güvenli al (TUR 2)"""
+    try:
+        min_matrisi = st.session_state.get('min_tamamlama_matrisi', {})
+        
+        if not min_matrisi:
+            logger.warning("Min tamamlama matrisi boş, default 0.0 kullanılıyor")
+            return 0.0
+        
+        if magaza_cover_grubu not in min_matrisi:
+            logger.debug(f"Min matrisinde mağaza grubu bulunamadı: {magaza_cover_grubu}")
+            return 0.0
+        
+        return min_matrisi[magaza_cover_grubu].get(urun_cover_grubu, 0.0)
+        
+    except (KeyError, TypeError, AttributeError) as e:
+        logger.error(f"Min çarpanı alma hatası: {e}", exc_info=True)
+        return 0.0
+
 # -------------------------------
-# ALIM SİPARİŞ İHTİYACI HESAPLAMA (DÜZELTİLMİŞ)
+# ALIM SİPARİŞ İHTİYACI HESAPLAMA
 # -------------------------------
+
 def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame, 
                            original_sevkiyat_df: pd.DataFrame, depo_stok_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -306,7 +335,7 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
             alim_siparis_df['kalan_ihtiyac'] * alim_siparis_df['alim_carpan']
         ).clip(lower=0)
 
-        # ÖNEMLİ: Ürün bazında toplam alım siparişi - alim_carpan KORUNMALI
+        # Ürün bazında toplam alım siparişi
         alim_siparis_toplam = alim_siparis_df.groupby(
             ["depo_id", "urun_id", "klasmankod"], as_index=False
         ).agg({
@@ -315,7 +344,7 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
             'ihtiyac': 'sum',
             'depo_stok': 'first',
             'haftalik_satis': 'mean',
-            'alim_carpan': 'mean',  # ← BURADA KORUNUYOR
+            'alim_carpan': 'mean',
             'magaza_cover_grubu': lambda x: x.mode()[0] if len(x) > 0 else '0-4',
             'urun_cover_grubu': lambda x: x.mode()[0] if len(x) > 0 else '0-4'
         })
@@ -354,12 +383,13 @@ def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame,
         import traceback
         st.error(traceback.format_exc())
         return pd.DataFrame()
+
 # -------------------------------
 # COVER GRUPLARI VE MATRİS YÖNETİMİ
 # -------------------------------
 
 def initialize_session_state():
-    """Session state'i başlat"""
+    """Session state'i başlat - 3 MATRİS"""
     if "cover_gruplari" not in st.session_state:
         st.session_state.cover_gruplari = Config.DEFAULT_COVER_GROUPS.copy()
     
@@ -369,6 +399,10 @@ def initialize_session_state():
     if "alim_carpan_matrisi" not in st.session_state:
         st.session_state.alim_carpan_matrisi = Config.DEFAULT_ALIM_MATRIX.copy()
     
+    # YENİ: Min tamamlama matrisi
+    if "min_tamamlama_matrisi" not in st.session_state:
+        st.session_state.min_tamamlama_matrisi = Config.DEFAULT_MIN_TAMAMLAMA_MATRIX.copy()
+    
     if "cover_gruplari_edited" not in st.session_state:
         st.session_state.cover_gruplari_edited = st.session_state.cover_gruplari.copy()
     
@@ -377,18 +411,22 @@ def initialize_session_state():
     
     if "alim_carpan_matrisi_edited" not in st.session_state:
         st.session_state.alim_carpan_matrisi_edited = st.session_state.alim_carpan_matrisi.copy()
+    
+    # YENİ: Min tamamlama edited
+    if "min_tamamlama_matrisi_edited" not in st.session_state:
+        st.session_state.min_tamamlama_matrisi_edited = st.session_state.min_tamamlama_matrisi.copy()
 
 def show_carpan_matrix_table(matrix_data: Dict, matrix_type: str, color_scheme: str = "sevk"):
-    """Çarpan matrisini renkli tablo olarak göster"""
+    """Çarpan matrisini renkli tablo olarak göster - 3 MATRİS DESTEĞİ"""
     
     cover_gruplari = [g['etiket'] for g in st.session_state.cover_gruplari_edited]
     
     # DataFrame oluştur
+    default_value = 1.0 if color_scheme != "min_tamamlama" else 0.0
     df = pd.DataFrame(matrix_data).T
-    df = df.reindex(columns=cover_gruplari, index=cover_gruplari, fill_value=1.0)
+    df = df.reindex(columns=cover_gruplari, index=cover_gruplari, fill_value=default_value)
     
     st.write(f"**{matrix_type} Çarpan Matrisi**")
-    st.caption("🟢 Yüksek öncelik | 🟡 Normal | 🔵 Düşük öncelik | ⚫ Sevk yok")
     
     # Renklendirme fonksiyonu
     def color_cell(val):
@@ -403,6 +441,13 @@ def show_carpan_matrix_table(matrix_data: Dict, matrix_type: str, color_scheme: 
                     return 'background-color: #60a5fa; color: white'
                 else:
                     return 'background-color: #1f2937; color: white'
+            elif color_scheme == "min_tamamlama":
+                if val >= 1.0:
+                    return 'background-color: #4ade80; color: black; font-weight: bold'
+                elif val > 0:
+                    return 'background-color: #fbbf24; color: black'
+                else:
+                    return 'background-color: #1f2937; color: white'
             else:  # alim
                 if val >= 1.2:
                     return 'background-color: #4ade80; color: black; font-weight: bold'
@@ -414,6 +459,14 @@ def show_carpan_matrix_table(matrix_data: Dict, matrix_type: str, color_scheme: 
                     return 'background-color: #1f2937; color: white'
         except:
             return ''
+    
+    # Legend
+    if color_scheme == "sevk":
+        st.caption("🟢 Yüksek öncelik (≥1.1) | 🟡 Normal (0.9-1.1) | 🔵 Düşük öncelik (>0) | ⚫ Sevk yok (0)")
+    elif color_scheme == "min_tamamlama":
+        st.caption("🟢 Tamamla (≥1.0) | 🟡 Düşük öncelik (>0) | ⚫ Tamamlama yapma (0)")
+    else:
+        st.caption("🟢 Yüksek alım (≥1.2) | 🟡 Normal alım (1.0-1.2) | 🔵 Düşük alım (>0) | ⚫ Alım yok (0)")
     
     # Formatla ve göster
     styled_df = df.style\
@@ -427,7 +480,7 @@ def show_carpan_matrix_table(matrix_data: Dict, matrix_type: str, color_scheme: 
     
     st.dataframe(styled_df, use_container_width=True)
     
-    # Açıklama ekle
+    # Açıklama
     with st.expander("ℹ️ Matris Nasıl Okunur?"):
         example_mag = cover_gruplari[0]
         example_urun = cover_gruplari[1] if len(cover_gruplari) > 1 else cover_gruplari[0]
@@ -437,62 +490,31 @@ def show_carpan_matrix_table(matrix_data: Dict, matrix_type: str, color_scheme: 
         **Satırlar**: Mağaza cover grupları  
         **Sütunlar**: Ürün cover grupları  
         
-        **Örnek**: Eğer mağaza cover'ı **{example_mag}** ve ürün cover'ı **{example_urun}** ise,  
-        çarpan değeri: **{example_carpan}**
-        
-        **Çarpan ne işe yarar?**  
-        - İhtiyaç × Çarpan = Sevk Miktarı
-        - Yüksek çarpan = O mağazaya o üründen daha fazla gönder
-        - 0 çarpan = Hiç gönderme
+        **Örnek**: Mağaza **{example_mag}** × Ürün **{example_urun}** → Çarpan: **{example_carpan}**
         """)
-
-def show_matrix_simple_view():
-    """Matrisi basit tablo olarak göster (HEAT MAP YOK)"""
-    st.markdown("---")
-    st.subheader("📊 Matris Görünümü")
-    
-    tab1, tab2 = st.tabs(["🚚 Sevkiyat Matrisi", "🛒 Alım Matrisi"])
-    
-    with tab1:
-        show_carpan_matrix_table(
-            st.session_state.carpan_matrisi_edited,
-            "Sevkiyat",
-            color_scheme="sevk"
-        )
         
-        # İpuçları
-        with st.expander("💡 Sevkiyat Çarpan Kullanım Önerileri"):
+        if color_scheme == "sevk":
             st.markdown("""
-            - **1.2-1.5**: Acil ihtiyaç (düşük cover × düşük cover)
-            - **0.9-1.1**: Normal sevkiyat
-            - **0.0-0.8**: Düşük öncelik veya sevk yapma
-            
-            **Strateji İpucu:**  
-            Düşük mağaza cover + Düşük ürün cover = Yüksek çarpan (acil!)  
-            Yüksek mağaza cover + Yüksek ürün cover = Düşük/sıfır çarpan
+            **Sevkiyat Matrisi (TUR 1):**
+            - İhtiyaç × Sevkiyat Çarpanı = Sevk Miktarı
+            - Yüksek çarpan = Daha fazla gönder
             """)
-    
-    with tab2:
-        show_carpan_matrix_table(
-            st.session_state.alim_carpan_matrisi_edited,
-            "Alım",
-            color_scheme="alim"
-        )
-        
-        # İpuçları
-        with st.expander("💡 Alım Çarpan Kullanım Önerileri"):
+        elif color_scheme == "min_tamamlama":
             st.markdown("""
-            - **1.5-2.0**: Yüksek stok ihtiyacı
-            - **1.0-1.5**: Normal alım
-            - **0.0**: Alım yapma
-            
-            **Strateji İpucu:**  
-            Alım matrisi, tedarikçiden sipariş miktarlarını belirler.  
-            Genellikle sevkiyat matrisinden daha yüksek çarpanlar kullanılır.
+            **Min Tamamlama Matrisi (TUR 2):**
+            - Eksik Min × Min Çarpan = Sevk Miktarı
+            - Çarpan 0 = Tamamlama yapma
+            - **Eski:** `if cover >= 12: skip`
+            - **Yeni:** `if min_carpan == 0: skip`
+            """)
+        else:
+            st.markdown("""
+            **Alım Matrisi:**
+            - Kalan İhtiyaç × Alım Çarpanı = Alım Miktarı
             """)
 
 def show_current_settings_user_friendly():
-    """Geçerli ayarları kullanıcı dostu göster (JSON YOK)"""
+    """Geçerli ayarları kullanıcı dostu göster - 3 MATRİS"""
     
     st.markdown("---")
     st.subheader("📋 Geçerli Parametre Ayarları")
@@ -514,11 +536,10 @@ def show_current_settings_user_friendly():
         
         st.caption(f"✅ Toplam **{len(cover_df)}** grup tanımlı")
     
-    # 2. Sevkiyat Matrisi Özeti
-    with st.expander("🚚 Sevkiyat Matrisi Özeti", expanded=True):
+    # 2. Sevkiyat Matrisi
+    with st.expander("🚚 Sevkiyat Matrisi Özeti (TUR 1)", expanded=True):
         carpan_matrisi = st.session_state.carpan_matrisi
         
-        # İstatistikler
         all_values = [
             val 
             for grup_vals in carpan_matrisi.values() 
@@ -531,39 +552,27 @@ def show_current_settings_user_friendly():
             col2.metric("En Düşük Çarpan", f"{min(all_values):.2f}")
             col3.metric("Ortalama Çarpan", f"{sum(all_values)/len(all_values):.2f}")
             col4.metric("Sıfır Sevk Sayısı", sum(1 for v in all_values if v == 0))
-            
-            # Örnek kombinasyonlar
-            st.write("**Örnek Kombinasyonlar:**")
-            
-            cover_gruplari = list(carpan_matrisi.keys())
-            examples = []
-            
-            if len(cover_gruplari) >= 2:
-                examples = [
-                    (cover_gruplari[0], cover_gruplari[0], "En düşük cover × En düşük cover"),
-                    (cover_gruplari[0], cover_gruplari[-1], "En düşük cover × En yüksek cover"),
-                    (cover_gruplari[-1], cover_gruplari[0], "En yüksek cover × En düşük cover"),
-                ]
-                
-                if len(cover_gruplari) >= 3:
-                    mid = len(cover_gruplari) // 2
-                    examples.append((cover_gruplari[mid], cover_gruplari[mid], "Orta cover × Orta cover"))
-            
-            example_df = pd.DataFrame([
-                {
-                    'Mağaza Cover': mag,
-                    'Ürün Cover': urun,
-                    'Çarpan': carpan_matrisi.get(mag, {}).get(urun, 'N/A'),
-                    'Açıklama': aciklama
-                }
-                for mag, urun, aciklama in examples
-                if mag in carpan_matrisi and urun in carpan_matrisi.get(mag, {})
-            ])
-            
-            if not example_df.empty:
-                st.dataframe(example_df, use_container_width=True, hide_index=True)
     
-    # 3. Alım Matrisi Özeti
+    # 3. Min Tamamlama Matrisi
+    with st.expander("🔧 Min Tamamlama Matrisi Özeti (TUR 2)", expanded=True):
+        min_matrisi = st.session_state.min_tamamlama_matrisi
+        
+        all_values = [
+            val 
+            for grup_vals in min_matrisi.values() 
+            for val in grup_vals.values()
+        ]
+        
+        if all_values:
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("En Yüksek Çarpan", f"{max(all_values):.2f}")
+            col2.metric("En Düşük Çarpan", f"{min(all_values):.2f}")
+            col3.metric("Ortalama Çarpan", f"{sum(all_values)/len(all_values):.2f}")
+            col4.metric("Tamamlama Yok Sayısı", sum(1 for v in all_values if v == 0))
+            
+            st.info("💡 Bu matris TUR 2'de kullanılır. Çarpan 0 ise tamamlama yapılmaz.")
+    
+    # 4. Alım Matrisi
     with st.expander("🛒 Alım Matrisi Özeti", expanded=True):
         alim_matrisi = st.session_state.alim_carpan_matrisi
         
@@ -579,76 +588,53 @@ def show_current_settings_user_friendly():
             col2.metric("En Düşük Çarpan", f"{min(all_values):.2f}")
             col3.metric("Ortalama Çarpan", f"{sum(all_values)/len(all_values):.2f}")
             col4.metric("Sıfır Alım Sayısı", sum(1 for v in all_values if v == 0))
-            
-            st.info("💡 Alım matrisi, tedarikçiden sipariş miktarlarını belirler")
     
-    # 4. Varsayılan KPI Değerleri
+    # 5. KPI Değerleri
     with st.expander("🎯 Varsayılan KPI Değerleri", expanded=False):
-        st.info("⚠️ Bu değerler sadece KPI.csv dosyası yüklenmediğinde kullanılır")
+        st.info("⚠️ Bu değerler sadece KPI.csv yüklenmediğinde kullanılır")
         
         kpi_df = pd.DataFrame([
-            {
-                'Parametre': 'Hedef Hafta',
-                'Değer': st.session_state.get('hedef_hafta_slider', 4),
-                'Birim': 'hafta',
-                'Açıklama': 'Kaç haftalık stok hedefleniyor'
-            },
-            {
-                'Parametre': 'Min Adet',
-                'Değer': st.session_state.get('min_adet_slider', 3),
-                'Birim': 'adet',
-                'Açıklama': 'Minimum sevk/alım miktarı'
-            },
-            {
-                'Parametre': 'Maks Adet',
-                'Değer': st.session_state.get('maks_adet_slider', 20),
-                'Birim': 'adet',
-                'Açıklama': 'Maksimum sevk/alım miktarı'
-            }
+            {'Parametre': 'Hedef Hafta', 'Değer': st.session_state.get('hedef_hafta_slider', 4), 'Birim': 'hafta'},
+            {'Parametre': 'Min Adet', 'Değer': st.session_state.get('min_adet_slider', 3), 'Birim': 'adet'},
+            {'Parametre': 'Maks Adet', 'Değer': st.session_state.get('maks_adet_slider', 20), 'Birim': 'adet'}
         ])
         
         st.dataframe(kpi_df, use_container_width=True, hide_index=True)
     
-    # 5. Özet Bilgi
-    carpan_count = len(st.session_state.carpan_matrisi)
-    alim_count = len(st.session_state.alim_carpan_matrisi)
-    
+    # Özet
     st.success(f"""
-    ✅ **Sistem Hazır**  
-    - {len(st.session_state.cover_gruplari)} cover grubu tanımlı  
-    - {carpan_count}×{carpan_count} sevkiyat matrisi  
-    - {alim_count}×{alim_count} alım matrisi  
+    ✅ **Sistem Hazır - 3 Matris Aktif**  
+    - {len(st.session_state.cover_gruplari)} cover grubu
+    - Sevkiyat matrisi (TUR 1)
+    - Min tamamlama matrisi (TUR 2)
+    - Alım matrisi
     """)
 
 def manage_cover_groups_and_matrix():
-    """Cover grupları ve matris yönetimi"""
+    """Cover grupları ve matris yönetimi - 3 MATRİS"""
     st.header("🔧 Parametre Ayarları")
     
-    # Session state'i kontrol et ve başlat
     initialize_session_state()
 
-    # KPI ve Varsayılanlar
+    # KPI Değerleri
     st.subheader("🎯 KPI & Varsayılan Değerler")
-    st.info("⚠️ **ÖNEMLİ:** Aşağıdaki değerler SADECE KPI.csv dosyası yüklenmediğinde kullanılacaktır.")
+    st.info("⚠️ Bu değerler SADECE KPI.csv yüklenmediğinde kullanılır")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         default_hedef_hafta = st.slider("Varsayılan Hedef Hafta", 1, 12, 4, key="hedef_hafta_slider")
-    
     with col2:
         default_min_adet = st.slider("Varsayılan Min Adet", 0, 100, 3, key="min_adet_slider")
-    
     with col3:
         default_maks_adet = st.slider("Varsayılan Maks Adet", 0, 200, 20, key="maks_adet_slider")
     
     st.markdown("---")
     
-    # Cover Grupları Yönetimi
+    # Cover Grupları
     st.subheader("📈 Cover Grupları")
-    st.info("Mağaza ve ürün cover değerlerinin gruplandırılması - Çarpan matriste ayrıca tanımlanır")
+    st.info("Mağaza ve ürün cover değerlerinin gruplandırılması")
     
-    # Mevcut cover gruplarını DataFrame'e dönüştür
     current_df = pd.DataFrame(st.session_state.cover_gruplari_edited)
     
     edited_df = st.data_editor(
@@ -663,163 +649,215 @@ def manage_cover_groups_and_matrix():
         key="cover_gruplari_editor"
     )
     
-    # Cover grupları değiştiğinde matrisleri otomatik güncelle
+    # Cover grupları değişince matrisleri güncelle
     if not edited_df.equals(current_df):
         st.session_state.cover_gruplari_edited = edited_df.to_dict('records')
         
-        # Yeni etiketleri al
         new_etiketler = [g['etiket'] for g in st.session_state.cover_gruplari_edited]
         
-        # Yeni matrisler oluştur
+        # 3 matris için yeni değerler
         new_matrix = {}
         new_alim_matrix = {}
+        new_min_matrix = {}
         
-        for magaza_grubu in new_etiketler:
-            new_matrix[magaza_grubu] = {}
-            new_alim_matrix[magaza_grubu] = {}
+        for mag in new_etiketler:
+            new_matrix[mag] = {}
+            new_alim_matrix[mag] = {}
+            new_min_matrix[mag] = {}
             
-            for urun_grubu in new_etiketler:
-                # Eski matristen değeri al, yoksa varsayılan hesapla
-                if magaza_grubu in st.session_state.carpan_matrisi_edited and urun_grubu in st.session_state.carpan_matrisi_edited[magaza_grubu]:
-                    new_matrix[magaza_grubu][urun_grubu] = st.session_state.carpan_matrisi_edited[magaza_grubu][urun_grubu]
+            for urun in new_etiketler:
+                # Sevkiyat
+                if mag in st.session_state.carpan_matrisi_edited and urun in st.session_state.carpan_matrisi_edited[mag]:
+                    new_matrix[mag][urun] = st.session_state.carpan_matrisi_edited[mag][urun]
                 else:
-                    # Varsayılan değer: gruplar arası mesafe baz alınarak
                     try:
-                        magaza_idx = new_etiketler.index(magaza_grubu)
-                        urun_idx = new_etiketler.index(urun_grubu)
-                        distance = abs(magaza_idx - urun_idx)
-                        new_matrix[magaza_grubu][urun_grubu] = max(0.05, 1.2 - distance * 0.2)
+                        mag_idx = new_etiketler.index(mag)
+                        urun_idx = new_etiketler.index(urun)
+                        distance = abs(mag_idx - urun_idx)
+                        new_matrix[mag][urun] = max(0.05, 1.2 - distance * 0.2)
                     except:
-                        new_matrix[magaza_grubu][urun_grubu] = 1.0
+                        new_matrix[mag][urun] = 1.0
                 
-                # Alım matrisi için
-                if magaza_grubu in st.session_state.alim_carpan_matrisi_edited and urun_grubu in st.session_state.alim_carpan_matrisi_edited[magaza_grubu]:
-                    new_alim_matrix[magaza_grubu][urun_grubu] = st.session_state.alim_carpan_matrisi_edited[magaza_grubu][urun_grubu]
+                # Alım
+                if mag in st.session_state.alim_carpan_matrisi_edited and urun in st.session_state.alim_carpan_matrisi_edited[mag]:
+                    new_alim_matrix[mag][urun] = st.session_state.alim_carpan_matrisi_edited[mag][urun]
                 else:
-                    # Alım için varsayılan değer: daha yüksek çarpanlar
                     try:
-                        magaza_idx = new_etiketler.index(magaza_grubu)
-                        urun_idx = new_etiketler.index(urun_grubu)
-                        distance = abs(magaza_idx - urun_idx)
-                        new_alim_matrix[magaza_grubu][urun_grubu] = max(0.1, 1.5 - distance * 0.2)
+                        mag_idx = new_etiketler.index(mag)
+                        urun_idx = new_etiketler.index(urun)
+                        distance = abs(mag_idx - urun_idx)
+                        new_alim_matrix[mag][urun] = max(0.1, 1.5 - distance * 0.2)
                     except:
-                        new_alim_matrix[magaza_grubu][urun_grubu] = 1.0
+                        new_alim_matrix[mag][urun] = 1.0
+                
+                # Min tamamlama
+                if mag in st.session_state.min_tamamlama_matrisi_edited and urun in st.session_state.min_tamamlama_matrisi_edited[mag]:
+                    new_min_matrix[mag][urun] = st.session_state.min_tamamlama_matrisi_edited[mag][urun]
+                else:
+                    try:
+                        mag_idx = new_etiketler.index(mag)
+                        urun_idx = new_etiketler.index(urun)
+                        if mag_idx <= 2 and urun_idx <= 2:
+                            distance = abs(mag_idx - urun_idx)
+                            new_min_matrix[mag][urun] = max(0.8, 1.2 - distance * 0.1)
+                        else:
+                            new_min_matrix[mag][urun] = 0.0
+                    except:
+                        new_min_matrix[mag][urun] = 0.0
         
         st.session_state.carpan_matrisi_edited = new_matrix
         st.session_state.alim_carpan_matrisi_edited = new_alim_matrix
-        st.success("✅ Cover grupları güncellendi! Matrisler otomatik olarak yenilendi.")
+        st.session_state.min_tamamlama_matrisi_edited = new_min_matrix
+        st.success("✅ Cover grupları güncellendi! 3 matris yenilendi.")
         st.rerun()
     
     st.markdown("---")
     
-    # Çarpan Matrisleri Yönetimi - SEVKİYAT ve ALIM
-    tab1, tab2 = st.tabs(["🚚 Sevkiyat Matrisi", "🛒Alım Matrisi"])
+    # 3 Matris Düzenleme
+    tab1, tab2, tab3 = st.tabs(["🚚 Sevkiyat (TUR 1)", "🔧 Min Tamamlama (TUR 2)", "🛒 Alım Matrisi"])
     
-    # Mevcut cover gruplarını al
     cover_gruplari_etiketler = [g['etiket'] for g in st.session_state.cover_gruplari_edited]
     
+    # TAB 1: Sevkiyat
     with tab1:
-        st.subheader("🎯 Sevkiyat Çarpan Matrisi")
-        st.info("⚠️ **Bu matris katsayıları ile sevk genişletme işlemi yapılmaktadır!**")
+        st.subheader("🎯 Sevkiyat Çarpan Matrisi (TUR 1)")
+        st.info("⚠️ İhtiyaç × Çarpan = Sevk Miktarı")
         
-        # Sevkiyat matrisini DataFrame'e dönüştür
         matrix_data = {}
-        for magaza_grubu in cover_gruplari_etiketler:
-            matrix_data[magaza_grubu] = {}
-            for urun_grubu in cover_gruplari_etiketler:
+        for mag in cover_gruplari_etiketler:
+            matrix_data[mag] = {}
+            for urun in cover_gruplari_etiketler:
                 try:
-                    matrix_data[magaza_grubu][urun_grubu] = st.session_state.carpan_matrisi_edited.get(
-                        magaza_grubu, {}).get(urun_grubu, 1.0)
+                    matrix_data[mag][urun] = st.session_state.carpan_matrisi_edited.get(mag, {}).get(urun, 1.0)
                 except:
-                    matrix_data[magaza_grubu][urun_grubu] = 1.0
+                    matrix_data[mag][urun] = 1.0
         
         matrix_df = pd.DataFrame(matrix_data)
         
-        # Eksik değerleri tamamla
-        for magaza_grubu in cover_gruplari_etiketler:
-            if magaza_grubu not in matrix_df.index:
-                matrix_df.loc[magaza_grubu] = {urun_grubu: 1.0 for urun_grubu in cover_gruplari_etiketler}
-            for urun_grubu in cover_gruplari_etiketler:
-                if pd.isna(matrix_df.loc[magaza_grubu, urun_grubu]):
-                    matrix_df.loc[magaza_grubu, urun_grubu] = 1.0
+        for mag in cover_gruplari_etiketler:
+            if mag not in matrix_df.index:
+                matrix_df.loc[mag] = {urun: 1.0 for urun in cover_gruplari_etiketler}
+            for urun in cover_gruplari_etiketler:
+                if pd.isna(matrix_df.loc[mag, urun]):
+                    matrix_df.loc[mag, urun] = 1.0
         
-        # Sütun ve index sıralamasını düzelt
-        matrix_df = matrix_df.reindex(columns=cover_gruplari_etiketler)
-        matrix_df = matrix_df.reindex(index=cover_gruplari_etiketler)
-        
-        st.write("**Sevkiyat Çarpan Matrisi Düzenleyici**")
+        matrix_df = matrix_df.reindex(columns=cover_gruplari_etiketler, index=cover_gruplari_etiketler)
         
         matrix_edited = st.data_editor(
             matrix_df,
             use_container_width=True,
             column_config={col: st.column_config.NumberColumn(
-                format="%.2f", 
-                min_value=0.01, 
-                max_value=2.0,
-                step=0.1
+                format="%.2f", min_value=0.0, max_value=2.0, step=0.1
             ) for col in matrix_df.columns},
             key="carpan_matrisi_editor"
         )
         
-        # Matris değişikliklerini kaydet
         if not matrix_edited.equals(matrix_df):
             st.session_state.carpan_matrisi_edited = matrix_edited.to_dict()
             st.success("✅ Sevkiyat matrisi güncellendi!")
             st.rerun()
     
+    # TAB 2: Min Tamamlama
     with tab2:
-        st.subheader("🛒 Alım Çarpan Matrisi")
-        st.info("💰 **Bu matris katsayıları ile alım sipariş miktarları hesaplanacaktır!**")
+        st.subheader("🔧 Min Tamamlama Çarpan Matrisi (TUR 2)")
+        st.info("🎯 Eksik Min × Çarpan = Sevk Miktarı")
         
-        # Alım matrisini DataFrame'e dönüştür
-        alim_matrix_data = {}
-        for magaza_grubu in cover_gruplari_etiketler:
-            alim_matrix_data[magaza_grubu] = {}
-            for urun_grubu in cover_gruplari_etiketler:
+        st.warning("""
+        ⚠️ **Önemli:**
+        - Çarpan 0 = Tamamlama yapma
+        - **Eski:** `if cover >= 12: skip`
+        - **Yeni:** `if min_carpan == 0: skip`
+        """)
+        
+        min_matrix_data = {}
+        for mag in cover_gruplari_etiketler:
+            min_matrix_data[mag] = {}
+            for urun in cover_gruplari_etiketler:
                 try:
-                    alim_matrix_data[magaza_grubu][urun_grubu] = st.session_state.alim_carpan_matrisi_edited.get(
-                        magaza_grubu, {}).get(urun_grubu, 1.0)
+                    min_matrix_data[mag][urun] = st.session_state.min_tamamlama_matrisi_edited.get(mag, {}).get(urun, 0.0)
                 except:
-                    alim_matrix_data[magaza_grubu][urun_grubu] = 1.0
+                    min_matrix_data[mag][urun] = 0.0
+        
+        min_matrix_df = pd.DataFrame(min_matrix_data)
+        
+        for mag in cover_gruplari_etiketler:
+            if mag not in min_matrix_df.index:
+                min_matrix_df.loc[mag] = {urun: 0.0 for urun in cover_gruplari_etiketler}
+            for urun in cover_gruplari_etiketler:
+                if pd.isna(min_matrix_df.loc[mag, urun]):
+                    min_matrix_df.loc[mag, urun] = 0.0
+        
+        min_matrix_df = min_matrix_df.reindex(columns=cover_gruplari_etiketler, index=cover_gruplari_etiketler)
+        
+        min_matrix_edited = st.data_editor(
+            min_matrix_df,
+            use_container_width=True,
+            column_config={col: st.column_config.NumberColumn(
+                format="%.2f", min_value=0.0, max_value=2.0, step=0.1
+            ) for col in min_matrix_df.columns},
+            key="min_tamamlama_matrisi_editor"
+        )
+        
+        if not min_matrix_edited.equals(min_matrix_df):
+            st.session_state.min_tamamlama_matrisi_edited = min_matrix_edited.to_dict()
+            st.success("✅ Min tamamlama matrisi güncellendi!")
+            st.rerun()
+    
+    # TAB 3: Alım
+    with tab3:
+        st.subheader("🛒 Alım Çarpan Matrisi")
+        st.info("💰 Kalan İhtiyaç × Çarpan = Alım Miktarı")
+        
+        alim_matrix_data = {}
+        for mag in cover_gruplari_etiketler:
+            alim_matrix_data[mag] = {}
+            for urun in cover_gruplari_etiketler:
+                try:
+                    alim_matrix_data[mag][urun] = st.session_state.alim_carpan_matrisi_edited.get(mag, {}).get(urun, 1.0)
+                except:
+                    alim_matrix_data[mag][urun] = 1.0
         
         alim_matrix_df = pd.DataFrame(alim_matrix_data)
         
-        # Eksik değerleri tamamla
-        for magaza_grubu in cover_gruplari_etiketler:
-            if magaza_grubu not in alim_matrix_df.index:
-                alim_matrix_df.loc[magaza_grubu] = {urun_grubu: 1.0 for urun_grubu in cover_gruplari_etiketler}
-            for urun_grubu in cover_gruplari_etiketler:
-                if pd.isna(alim_matrix_df.loc[magaza_grubu, urun_grubu]):
-                    alim_matrix_df.loc[magaza_grubu, urun_grubu] = 1.0
+        for mag in cover_gruplari_etiketler:
+            if mag not in alim_matrix_df.index:
+                alim_matrix_df.loc[mag] = {urun: 1.0 for urun in cover_gruplari_etiketler}
+            for urun in cover_gruplari_etiketler:
+                if pd.isna(alim_matrix_df.loc[mag, urun]):
+                    alim_matrix_df.loc[mag, urun] = 1.0
         
-        # Sütun ve index sıralamasını düzelt
-        alim_matrix_df = alim_matrix_df.reindex(columns=cover_gruplari_etiketler)
-        alim_matrix_df = alim_matrix_df.reindex(index=cover_gruplari_etiketler)
-        
-        st.write("**Alım Çarpan Matrisi Düzenleyici**")
+        alim_matrix_df = alim_matrix_df.reindex(columns=cover_gruplari_etiketler, index=cover_gruplari_etiketler)
         
         alim_matrix_edited = st.data_editor(
             alim_matrix_df,
             use_container_width=True,
             column_config={col: st.column_config.NumberColumn(
-                format="%.2f", 
-                min_value=0.01, 
-                max_value=3.0,  # Alım için daha yüksek maksimum değer
-                step=0.1
+                format="%.2f", min_value=0.0, max_value=3.0, step=0.1
             ) for col in alim_matrix_df.columns},
             key="alim_carpan_matrisi_editor"
         )
         
-        # Alım matrisi değişikliklerini kaydet
         if not alim_matrix_edited.equals(alim_matrix_df):
             st.session_state.alim_carpan_matrisi_edited = alim_matrix_edited.to_dict()
             st.success("✅ Alım matrisi güncellendi!")
             st.rerun()
     
-    # Matris Görselleştirme - BASİTLEŞTİRİLMİŞ (HEAT MAP YOK)
-    show_matrix_simple_view()
+    # Görselleştirme
+    st.markdown("---")
+    st.subheader("📊 Matris Görünümleri")
     
-    # Kaydetme butonları
+    viz_tab1, viz_tab2, viz_tab3 = st.tabs(["🚚 Sevkiyat", "🔧 Min Tamamlama", "🛒 Alım"])
+    
+    with viz_tab1:
+        show_carpan_matrix_table(st.session_state.carpan_matrisi_edited, "Sevkiyat (TUR 1)", "sevk")
+    
+    with viz_tab2:
+        show_carpan_matrix_table(st.session_state.min_tamamlama_matrisi_edited, "Min Tamamlama (TUR 2)", "min_tamamlama")
+    
+    with viz_tab3:
+        show_carpan_matrix_table(st.session_state.alim_carpan_matrisi_edited, "Alım", "alim")
+    
+    # Kaydetme
     st.markdown("---")
     st.subheader("💾 Ayarları Kaydet")
     
@@ -827,15 +865,13 @@ def manage_cover_groups_and_matrix():
     
     with col1:
         if st.button("💾 Tüm Değişiklikleri Kaydet", type="primary", use_container_width=True, key="save_all"):
-            # Cover gruplarını kaydet
             st.session_state.cover_gruplari = st.session_state.cover_gruplari_edited.copy()
-            
-            # Matrisleri kaydet
             st.session_state.carpan_matrisi = st.session_state.carpan_matrisi_edited.copy()
             st.session_state.alim_carpan_matrisi = st.session_state.alim_carpan_matrisi_edited.copy()
+            st.session_state.min_tamamlama_matrisi = st.session_state.min_tamamlama_matrisi_edited.copy()
             
-            logger.info("Tüm ayarlar kaydedildi")
-            st.success("✅ Tüm ayarlar kalıcı olarak güncellendi!")
+            logger.info("3 matris kaydedildi")
+            st.success("✅ Tüm ayarlar kaydedildi! (3 matris)")
             st.rerun()
     
     with col2:
@@ -843,11 +879,13 @@ def manage_cover_groups_and_matrix():
             st.session_state.cover_gruplari = Config.DEFAULT_COVER_GROUPS.copy()
             st.session_state.carpan_matrisi = Config.DEFAULT_SEVK_MATRIX.copy()
             st.session_state.alim_carpan_matrisi = Config.DEFAULT_ALIM_MATRIX.copy()
+            st.session_state.min_tamamlama_matrisi = Config.DEFAULT_MIN_TAMAMLAMA_MATRIX.copy()
             st.session_state.cover_gruplari_edited = Config.DEFAULT_COVER_GROUPS.copy()
             st.session_state.carpan_matrisi_edited = Config.DEFAULT_SEVK_MATRIX.copy()
             st.session_state.alim_carpan_matrisi_edited = Config.DEFAULT_ALIM_MATRIX.copy()
+            st.session_state.min_tamamlama_matrisi_edited = Config.DEFAULT_MIN_TAMAMLAMA_MATRIX.copy()
             
-            logger.info("Varsayılan değerlere dönüldü")
+            logger.info("Varsayılanlara dönüldü")
             st.success("✅ Varsayılan değerlere dönüldü!")
             st.rerun()
     
@@ -858,7 +896,7 @@ def manage_cover_groups_and_matrix():
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
 
 # -------------------------------
-# DOSYA YÜKLEME BÖLÜMÜ
+# DOSYA YÜKLEME
 # -------------------------------
 
 def create_file_upload_section():
@@ -872,9 +910,9 @@ def create_file_upload_section():
         - **Depo_Stok.csv**: depo_id, urun_id, depo_stok
         
         **Opsiyonel Dosyalar:**
-        - **Urunler.csv**: urun_id, urun_adi, klasman_id
+        - **Urunler.csv**: urun_id, urun_adi
         - **Magazalar.csv**: magaza_id, magaza_adi  
-        - **Cover.csv**: magaza_id, cover, cluster 
+        - **Cover.csv**: magaza_id, cover 
         - **KPI.csv**: klasmankod, hedef_hafta, min_adet, maks_adet
         """)
     
@@ -888,7 +926,7 @@ def create_file_upload_section():
                 df = read_csv_advanced(uploaded_file)
                 file_data[uploaded_file.name] = df
                 st.success(f"✅ {uploaded_file.name} - {len(df.columns)} kolon, {len(df)} satır")
-                logger.info(f"Dosya yüklendi: {uploaded_file.name}, {len(df)} satır")
+                logger.info(f"Dosya yüklendi: {uploaded_file.name}")
                 
             except Exception as e:
                 st.error(f"❌ {uploaded_file.name} okunamadı: {e}")
@@ -897,151 +935,38 @@ def create_file_upload_section():
     return file_data
 
 # -------------------------------
-# ALIM SİPARİŞ İHTİYACI HESAPLAMA
-# -------------------------------
-
-def calculate_purchase_need(sevk_df: pd.DataFrame, total_sevk: pd.DataFrame, 
-                           original_sevkiyat_df: pd.DataFrame, depo_stok_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Karşılanamayan ihtiyaçları hesapla - BASİT VERSİYON
-    """
-    try:
-        if original_sevkiyat_df.empty:
-            return pd.DataFrame()
-        
-        # Orijinal sevkiyat verisini kopyala
-        sevkiyat_df = original_sevkiyat_df.copy()
-        
-        # Sevkiyat miktarını birleştir
-        if not sevk_df.empty and 'sevk_miktar' in sevk_df.columns:
-            sevk_toplam = sevk_df.groupby(['depo_id', 'magaza_id', 'urun_id'])['sevk_miktar'].sum().reset_index()
-            sevkiyat_df = pd.merge(
-                sevkiyat_df,
-                sevk_toplam,
-                on=['depo_id', 'magaza_id', 'urun_id'],
-                how='left'
-            )
-            sevkiyat_df['sevk_miktar'] = sevkiyat_df['sevk_miktar'].fillna(0)
-        else:
-            sevkiyat_df['sevk_miktar'] = 0
-        
-        # İhtiyaç hesapla (eğer yoksa)
-        if 'ihtiyac' not in sevkiyat_df.columns:
-            sevkiyat_df['ihtiyac'] = (
-                (sevkiyat_df['haftalik_satis'] * sevkiyat_df.get('hedef_hafta', 4)) - 
-                (sevkiyat_df['mevcut_stok'] + sevkiyat_df.get('yolda', 0))
-            ).clip(lower=0)
-        
-        # Kalan ihtiyaç = ihtiyaç - sevk_miktar
-        sevkiyat_df["kalan_ihtiyac"] = (sevkiyat_df["ihtiyac"] - sevkiyat_df["sevk_miktar"]).clip(lower=0)
-        
-        # Depo stok bilgilerini ekle
-        if not depo_stok_df.empty:
-            depo_stok_toplam = depo_stok_df.groupby(['depo_id', 'urun_id'])['depo_stok'].sum().reset_index()
-            sevkiyat_df = pd.merge(
-                sevkiyat_df,
-                depo_stok_toplam,
-                on=['depo_id', 'urun_id'],
-                how='left'
-            )
-            sevkiyat_df['depo_stok'] = sevkiyat_df['depo_stok'].fillna(0)
-        else:
-            sevkiyat_df['depo_stok'] = 0
-
-        # Karşılanamayan ve depoda stok olmayanları filtrele
-        alim_siparis_df = sevkiyat_df[
-            (sevkiyat_df["kalan_ihtiyac"] > 0) & (sevkiyat_df["depo_stok"] <= 0)
-        ].copy()
-
-        if alim_siparis_df.empty:
-            st.info("ℹ️ Alım ihtiyacı bulunmamaktadır.")
-            return pd.DataFrame()
-
-        # BASİT HESAP: Alım miktarı = kalan ihtiyaç
-        alim_siparis_df['alim_siparis_miktari'] = alim_siparis_df['kalan_ihtiyac']
-
-        # Ürün bazında toplam alım siparişi
-        alim_siparis_toplam = alim_siparis_df.groupby(
-            ["depo_id", "urun_id", "klasmankod"], as_index=False
-        ).agg({
-            'alim_siparis_miktari': 'sum',
-            'kalan_ihtiyac': 'sum',
-            'ihtiyac': 'first',
-            'depo_stok': 'first',
-            'haftalik_satis': 'first'
-        })
-
-        # Ürün adını ekle
-        if 'urunler_df' in st.session_state and not st.session_state.urunler_df.empty:
-            urunler_df = st.session_state.urunler_df.copy()
-            urunler_df['urun_id'] = urunler_df['urun_id'].astype(str).str.strip()
-            alim_siparis_toplam['urun_id'] = alim_siparis_toplam['urun_id'].astype(str).str.strip()
-            if 'urun_adi' in urunler_df.columns:
-                alim_siparis_toplam = pd.merge(
-                    alim_siparis_toplam,
-                    urunler_df[['urun_id', 'urun_adi']],
-                    on='urun_id',
-                    how='left'
-                )
-        
-        if 'urun_adi' not in alim_siparis_toplam.columns:
-            alim_siparis_toplam['urun_adi'] = "Ürün " + alim_siparis_toplam['urun_id'].astype(str)
-        
-        # Cover bilgilerini ekle
-        alim_siparis_toplam['toplam_ihtiyac_cover'] = (
-            alim_siparis_toplam['alim_siparis_miktari'] / alim_siparis_toplam['haftalik_satis']
-        ).round(1)
-        
-        # Sıralama
-        alim_siparis_toplam = alim_siparis_toplam.sort_values('alim_siparis_miktari', ascending=False)
-        
-        logger.info(f"Alım ihtiyacı hesaplandı: {len(alim_siparis_toplam)} ürün")
-        return alim_siparis_toplam
-    
-    except Exception as e:
-        st.error(f"Alım ihtiyacı hesaplanırken hata: {str(e)}")
-        logger.error(f"Alım ihtiyacı hesaplama hatası: {e}", exc_info=True)
-        return pd.DataFrame()
-
-# -------------------------------
-# VERİ ÖN İŞLEME FONKSİYONLARI
+# VERİ ÖN İŞLEME
 # -------------------------------
 
 def load_and_process_files(file_data: Dict) -> Tuple:
-    """Dosyaları yükle ve ön işle"""
+    """Dosyaları yükle"""
     sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df = None, None, None, None, None, None
     
     for name, df in file_data.items():
         name_lower = name.lower()
         if "sevkiyat" in name_lower:
             sevk_df = df.copy()
-            st.info(f"📊 Sevkiyat dosyası: {len(sevk_df)} satır")
-            logger.info(f"Sevkiyat yüklendi: {len(sevk_df)} satır")
+            st.info(f"📊 Sevkiyat: {len(sevk_df)} satır")
         elif "depo" in name_lower and "stok" in name_lower:
             depo_stok_df = df.copy()
-            st.info(f"📦 Depo stok dosyası: {len(depo_stok_df)} satır")
-            logger.info(f"Depo stok yüklendi: {len(depo_stok_df)} satır")
+            st.info(f"📦 Depo stok: {len(depo_stok_df)} satır")
         elif "urun" in name_lower:
             urunler_df = df.copy()
-            st.info(f"🏷️ Ürünler dosyası: {len(urunler_df)} satır")
+            st.info(f"🏷️ Ürünler: {len(urunler_df)} satır")
             st.session_state.urunler_df = urunler_df
-            logger.info(f"Ürünler yüklendi: {len(urunler_df)} satır")
         elif "magaza" in name_lower:
             magazalar_df = df.copy()
-            st.info(f"🏪 Mağazalar dosyası: {len(magazalar_df)} satır")
+            st.info(f"🏪 Mağazalar: {len(magazalar_df)} satır")
             st.session_state.magazalar_df = magazalar_df
-            logger.info(f"Mağazalar yüklendi: {len(magazalar_df)} satır")
         elif "cover" in name_lower:
             cover_df = df.copy()
-            st.info(f"📈 Cover dosyası: {len(cover_df)} satır")
-            logger.info(f"Cover yüklendi: {len(cover_df)} satır")
+            st.info(f"📈 Cover: {len(cover_df)} satır")
         elif "kpi" in name_lower:
             kpi_df = df.copy()
-            st.info(f"🎯 KPI dosyası: {len(kpi_df)} satır")
-            logger.info(f"KPI yüklendi: {len(kpi_df)} satır")
+            st.info(f"🎯 KPI: {len(kpi_df)} satır")
     
     if sevk_df is None or depo_stok_df is None:
-        raise Exception("Zorunlu dosyalar (Sevkiyat.csv, Depo_Stok.csv) eksik!")
+        raise Exception("Zorunlu dosyalar eksik!")
     
     return sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df
 
@@ -1049,42 +974,31 @@ def preprocess_sevkiyat_data(sevk_df: pd.DataFrame, cover_df: Optional[pd.DataFr
                              kpi_df: Optional[pd.DataFrame], params: Dict) -> pd.DataFrame:
     """Sevkiyat verisini ön işle"""
     
-    # Kolon normalizasyonu
     sevk_df = normalize_columns(sevk_df)
-    
-    # Zorunlu kolon kontrolü
     validate_required_columns(sevk_df, Config.REQUIRED_SEVK_COLS, "Sevkiyat.csv")
     
-    # yolda kolonu kontrolü
     if 'yolda' not in sevk_df.columns:
         sevk_df['yolda'] = 0
-        st.info("ℹ️ 'yolda' kolonu eklenerek 0 değeri atandı")
     
-    # VERİ TİPLERİNİ GÜVENLİ ŞEKİLDE DÖNÜŞTÜR
-    st.info("🔄 Veri tipleri kontrol ediliyor...")
     sevk_df = safe_numeric_conversion(sevk_df, Config.NUMERIC_COLUMNS)
     
-    # Cover dosyasını işle
+    # Cover
     if cover_df is not None and not cover_df.empty:
         cover_df = normalize_columns(cover_df)
         if 'magaza_id' in cover_df.columns and 'cover' in cover_df.columns:
             cover_df = cover_df[['magaza_id', 'cover']].drop_duplicates()
             cover_df['magaza_id'] = cover_df['magaza_id'].astype(str).str.strip()
             sevk_df['magaza_id'] = sevk_df['magaza_id'].astype(str).str.strip()
-            
             sevk_df = sevk_df.merge(cover_df, on='magaza_id', how='left')
-            st.success("✅ Mağaza cover verileri eklendi")
+            st.success("✅ Cover verileri eklendi")
         else:
-            st.warning("⚠️ Cover dosyasında gerekli kolonlar bulunamadı")
             sevk_df['cover'] = Config.DEFAULT_COVER
     else:
-        st.warning("⚠️ Cover dosyası bulunamadı, varsayılan cover=999")
         sevk_df['cover'] = Config.DEFAULT_COVER
     
-    # Cover değerlerini temizle
     sevk_df['cover'] = pd.to_numeric(sevk_df['cover'], errors='coerce').fillna(Config.DEFAULT_COVER)
     
-    # KPI dosyasını işle
+    # KPI
     kpi_loaded = False
     if kpi_df is not None and not kpi_df.empty:
         kpi_df = normalize_columns(kpi_df)
@@ -1098,19 +1012,13 @@ def preprocess_sevkiyat_data(sevk_df: pd.DataFrame, cover_df: Optional[pd.DataFr
                     kpi_cols.append(col)
             
             sevk_df = sevk_df.merge(kpi_df[kpi_cols], on='klasmankod', how='left')
-            st.success("✅ KPI verileri eklendi (KPI.csv kullanılıyor)")
+            st.success("✅ KPI eklendi")
             kpi_loaded = True
-        else:
-            st.warning("⚠️ KPI dosyasında klasmankod bulunamadı")
-    else:
-        st.warning("⚠️ KPI dosyası bulunamadı, parametrelerden alınan değerler kullanılacak")
     
-    # Eksik KPI değerlerini doldur
     if not kpi_loaded:
         sevk_df['hedef_hafta'] = params['hedef_hafta']
         sevk_df['min_adet'] = params['min_adet']
         sevk_df['maks_adet'] = params['maks_adet']
-        st.info("ℹ️ Parametrelerden alınan değerler kullanılıyor")
     else:
         sevk_df['hedef_hafta'] = sevk_df['hedef_hafta'].fillna(params['hedef_hafta'])
         sevk_df['min_adet'] = sevk_df['min_adet'].fillna(params['min_adet'])
@@ -1119,11 +1027,8 @@ def preprocess_sevkiyat_data(sevk_df: pd.DataFrame, cover_df: Optional[pd.DataFr
     return sevk_df
 
 def calculate_covers_and_groups(sevk_df: pd.DataFrame, cover_gruplari: List[Dict]) -> pd.DataFrame:
-    """Cover değerlerini ve gruplarını hesapla"""
+    """Cover ve grupları hesapla"""
     
-    st.info("🔄 Ürün cover değerleri hesaplanıyor...")
-    
-    # Ürün cover hesaplama - VECTORİZE EDİLMİŞ
     sevk_df['urun_cover'] = sevk_df.apply(
         lambda row: calculate_urun_cover(
             row.get('haftalik_satis', 0), 
@@ -1132,7 +1037,6 @@ def calculate_covers_and_groups(sevk_df: pd.DataFrame, cover_gruplari: List[Dict
         ), axis=1
     )
     
-    # Cover gruplarını belirle - VECTORİZE EDİLMİŞ
     sevk_df['magaza_cover_grubu'] = sevk_df['cover'].apply(
         lambda x: get_cover_grubu_adi(x, cover_gruplari)
     )
@@ -1143,36 +1047,35 @@ def calculate_covers_and_groups(sevk_df: pd.DataFrame, cover_gruplari: List[Dict
     return sevk_df
 
 # -------------------------------
-# ANA HESAPLAMA FONKSİYONU - OPTİMİZE EDİLMİŞ
+# ANA HESAPLAMA - 3 MATRİS DESTEKLİ
 # -------------------------------
 
 def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: List[Dict]) -> Tuple:
-    """Ana sevkiyat hesaplama - OPTİMİZE EDİLMİŞ VERSİYON"""
+    """Ana sevkiyat hesaplama - 3 MATRİS"""
     
-    # 1. Dosyaları yükle
+    # 1. Yükle
     sevk_df, depo_stok_df, urunler_df, magazalar_df, cover_df, kpi_df = load_and_process_files(file_data)
     
-    # Orijinal sevkiyat df'ini kaydet (alım ihtiyacı için)
     original_sevkiyat_df = sevk_df.copy()
     
-    # 2. Depo stok verisini işle
+    # 2. Depo stok
     depo_stok_df = normalize_columns(depo_stok_df)
     validate_required_columns(depo_stok_df, Config.REQUIRED_DEPO_COLS, "Depo_Stok.csv")
     depo_stok_df = safe_numeric_conversion(depo_stok_df, ['depo_stok'])
     
-    # 3. Sevkiyat verisini ön işle
+    # 3. Sevkiyat ön işle
     sevk_df = preprocess_sevkiyat_data(sevk_df, cover_df, kpi_df, params)
     original_sevkiyat_df = preprocess_sevkiyat_data(original_sevkiyat_df, cover_df, kpi_df, params)
     
-    # 4. Cover değerlerini ve gruplarını hesapla
+    # 4. Cover hesapla
     sevk_df = calculate_covers_and_groups(sevk_df, cover_gruplari)
     original_sevkiyat_df = calculate_covers_and_groups(original_sevkiyat_df, cover_gruplari)
     
-    # 5. Cover <= 50 olanları filtrele
+    # 5. Filtrele
     df_filtered = sevk_df[sevk_df['cover'] <= Config.MAX_COVER_THRESHOLD].copy()
-    st.info(f"ℹ️ Mağaza cover ≤ {Config.MAX_COVER_THRESHOLD} olan {len(df_filtered)} satır işlenecek (toplam: {len(sevk_df)})")
+    st.info(f"ℹ️ Cover ≤ {Config.MAX_COVER_THRESHOLD}: {len(df_filtered)} satır işlenecek")
     
-    # 6. İhtiyaç hesabı - YOLDA STOĞU EKLE (mevcut mantık korundu)
+    # 6. İhtiyaç hesabı
     df_filtered["ihtiyac"] = (
         (df_filtered["haftalik_satis"] * df_filtered["hedef_hafta"]) - 
         (df_filtered["mevcut_stok"] + df_filtered["yolda"])
@@ -1183,13 +1086,13 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
         (original_sevkiyat_df["mevcut_stok"] + original_sevkiyat_df['yolda'])
     ).clip(lower=0)
     
-    # 7. Sıralama - Önce ürün cover'a göre
+    # 7. Sıralama
     df_sorted = df_filtered.sort_values(
         by=["urun_id", "urun_cover", "haftalik_satis"], 
         ascending=[True, True, False]
     ).copy()
     
-    # 8. Memory optimizasyonu
+    # 8. Memory optimize
     df_sorted = optimize_dataframe_memory(df_sorted)
     depo_stok_df = optimize_dataframe_memory(depo_stok_df)
     
@@ -1198,48 +1101,18 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    # Cover grupları
     cover_gruplari_sirali = sorted(cover_gruplari, key=lambda x: x['min'])
     cover_gruplari_etiketler = [g['etiket'] for g in cover_gruplari_sirali]
     
-    st.info(f"ℹ️ Kullanılan cover grupları: {cover_gruplari_etiketler}")
+    st.info(f"ℹ️ Cover grupları: {cover_gruplari_etiketler}")
     
-    # Tüm kombinasyonlar
-    all_combinations = [
-        (mag, urun) 
-        for mag in cover_gruplari_etiketler 
-        for urun in cover_gruplari_etiketler
-    ]
-    
-    st.info(f"ℹ️ Toplam {len(all_combinations)} kombinasyon işlenecek")
-    
-    # Kombinasyon dağılımını göster
-    st.write("🔍 Kombinasyon Dağılımı:")
-    dagilim_data = []
-    for magaza_grubu in cover_gruplari_etiketler:
-        for urun_grubu in cover_gruplari_etiketler:
-            count = len(df_sorted[
-                (df_sorted['magaza_cover_grubu'] == magaza_grubu) & 
-                (df_sorted['urun_cover_grubu'] == urun_grubu)
-            ])
-            dagilim_data.append({
-                'Mağaza Grubu': magaza_grubu,
-                'Ürün Grubu': urun_grubu,
-                'Kayıt Sayısı': count
-            })
-    
-    dagilim_df = pd.DataFrame(dagilim_data)
-    pivot_dagilim = dagilim_df.pivot(index='Mağaza Grubu', columns='Ürün Grubu', values='Kayıt Sayısı').fillna(0)
-    st.dataframe(pivot_dagilim, use_container_width=True)
-    
-    # Depo-ürün grupları
     depo_urun_gruplari = list(df_sorted.groupby(["depo_id", "urun_id"]))
-    total_groups = len(depo_urun_gruplari) * len(all_combinations)
+    total_groups = len(depo_urun_gruplari) * len(cover_gruplari_etiketler) * len(cover_gruplari_etiketler)
     processed_groups = 0
     
-    # Ana işlem döngüsü - OPTİMİZE EDİLMİŞ
+    # Ana döngü - 3 MATRİS
     for magaza_cover_grubu in cover_gruplari_etiketler:
-        status_text.text(f"⏳ Mağaza {magaza_cover_grubu} Grubu İşleniyor...")
+        status_text.text(f"⏳ Mağaza {magaza_cover_grubu}...")
         magaza_grup_df = df_sorted[df_sorted["magaza_cover_grubu"] == magaza_cover_grubu]
         
         if magaza_grup_df.empty:
@@ -1248,7 +1121,7 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
             continue
         
         for urun_cover_grubu in cover_gruplari_etiketler:
-            status_text.text(f"⏳ Mağaza {magaza_cover_grubu} × Ürün {urun_cover_grubu}...")
+            status_text.text(f"⏳ {magaza_cover_grubu} × {urun_cover_grubu}...")
             grup_df = magaza_grup_df[magaza_grup_df["urun_cover_grubu"] == urun_cover_grubu]
             
             if grup_df.empty:
@@ -1256,8 +1129,9 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                 progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
                 continue
             
-            # Çarpanı önceden al
+            # Çarpanları al
             carpan = safe_get_carpan(magaza_cover_grubu, urun_cover_grubu)
+            min_carpan = safe_get_min_carpan(magaza_cover_grubu, urun_cover_grubu)
             
             for (depo, urun), tum_grup in depo_urun_gruplari:
                 grup = tum_grup[
@@ -1270,7 +1144,7 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                     progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
                     continue
                 
-                # Depo stok kontrolü
+                # Depo stok
                 stok_idx = (depo_stok_df["depo_id"] == depo) & (depo_stok_df["urun_id"] == urun)
                 stok = int(depo_stok_df.loc[stok_idx, "depo_stok"].sum()) if stok_idx.any() else 0
                 
@@ -1279,7 +1153,7 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                     progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
                     continue
                 
-                # TUR 1: İhtiyaç bazlı sevkiyat
+                # TUR 1: İhtiyaç bazlı
                 for _, row in grup.iterrows():
                     min_adet = row["min_adet"]
                     MAKS_SEVK = row["maks_adet"]
@@ -1297,24 +1171,23 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                             "magaza_cover_grubu": magaza_cover_grubu,
                             "urun_cover_grubu": urun_cover_grubu,
                             "ihtiyac": ihtiyac, "ihtiyac_carpanli": ihtiyac_carpanli, 
-                            "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk,
+                            "carpan": carpan, "min_carpan": min_carpan, "yolda": row["yolda"], 
+                            "sevk_miktar": sevk,
                             "haftalik_satis": row["haftalik_satis"], "mevcut_stok": row["mevcut_stok"],
                             "cover": row["cover"], "urun_cover": row["urun_cover"],
                             "min_adet": min_adet, "maks_adet": MAKS_SEVK, "hedef_hafta": row["hedef_hafta"]
                         })
                 
-                # TUR 2: Min stok tamamlama (düşük cover olanlar için)
-                if stok > 0:
+                # TUR 2: Min tamamlama - MATRİS TABANLI (YENİ)
+                if stok > 0 and min_carpan > 0:  # ← MIN ÇARPAN KONTROLÜ
                     for _, row in grup.iterrows():
-                        if row["cover"] >= 12 and row["urun_cover"] >= 12:
-                            continue
-                            
                         min_adet = row["min_adet"]
                         MAKS_SEVK = row["maks_adet"]
                         mevcut = row["mevcut_stok"] + row["yolda"]
                         eksik_min = max(0, min_adet - mevcut)
                         
-                        eksik_min_carpanli = eksik_min * carpan
+                        # Min çarpanı uygula
+                        eksik_min_carpanli = eksik_min * min_carpan
                         
                         sevk2 = int(min(eksik_min_carpanli, stok, MAKS_SEVK)) if eksik_min_carpanli > 0 else 0
                         
@@ -1326,13 +1199,14 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                                 "magaza_cover_grubu": magaza_cover_grubu,
                                 "urun_cover_grubu": urun_cover_grubu,
                                 "ihtiyac": row["ihtiyac"], "ihtiyac_carpanli": row["ihtiyac"] * carpan,
-                                "carpan": carpan, "yolda": row["yolda"], "sevk_miktar": sevk2,
+                                "carpan": carpan, "min_carpan": min_carpan, "yolda": row["yolda"], 
+                                "sevk_miktar": sevk2,
                                 "haftalik_satis": row["haftalik_satis"], "mevcut_stok": row["mevcut_stok"],
                                 "cover": row["cover"], "urun_cover": row["urun_cover"],
                                 "min_adet": min_adet, "maks_adet": MAKS_SEVK, "hedef_hafta": row["hedef_hafta"]
                             })
                 
-                # Depo stok güncelleme
+                # Depo güncelle
                 if stok_idx.any():
                     if stok_idx.sum() == 1:
                         depo_stok_df.loc[stok_idx, "depo_stok"] = stok
@@ -1342,8 +1216,6 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
                 
                 processed_groups += 1
                 progress_bar.progress(min(100, int(100 * processed_groups / total_groups)))
-            
-            logger.info(f"✅ {magaza_cover_grubu} × {urun_cover_grubu} kombinasyonu tamamlandı")
     
     progress_bar.progress(100)
     status_text.text("✅ Hesaplama tamamlandı")
@@ -1352,18 +1224,16 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
     if sevk_listesi:
         sevk_df_result = pd.DataFrame(sevk_listesi)
         
-        # Grup bazında toplam sevkiyat
         total_sevk = sevk_df_result.groupby(
             ["depo_id", "magaza_id", "urun_id", "klasmankod", "magaza_cover_grubu", "urun_cover_grubu"], 
             as_index=False
         ).agg({
             "sevk_miktar": "sum", "yolda": "first", "haftalik_satis": "first",
             "ihtiyac": "first", "mevcut_stok": "first", "cover": "first",
-            "urun_cover": "first", "carpan": "first", "min_adet": "first", 
-            "maks_adet": "first", "hedef_hafta": "first", "tur": "first"
+            "urun_cover": "first", "carpan": "first", "min_carpan": "first",
+            "min_adet": "first", "maks_adet": "first", "hedef_hafta": "first", "tur": "first"
         })
         
-        # Min tamamlama (tur2) istatistiklerini hesapla
         min_tamamlama = sevk_df_result[sevk_df_result['tur'] == 2]['sevk_miktar'].sum()
         toplam_sevk = sevk_df_result['sevk_miktar'].sum()
         min_yuzde = (min_tamamlama / toplam_sevk * 100) if toplam_sevk > 0 else 0
@@ -1373,21 +1243,8 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
         st.session_state.toplam_sevk = toplam_sevk
         st.session_state.sevk_df_result = sevk_df_result
         
-        # Debug: Sonuçları göster
-        st.write("🎯 Hesaplama Sonuçları - Grup Dağılımı:")
-        grup_dagilim = sevk_df_result.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-            'sevk_miktar': 'sum',
-            'magaza_id': 'nunique'
-        }).reset_index()
-        
-        st.dataframe(grup_dagilim, use_container_width=True)
-        
-        st.write(f"   - Toplam sevkiyat: {toplam_sevk:,} adet")
-        st.write(f"   - Min tamamlama (Tur2): {min_tamamlama:,} adet")
-        st.write(f"   - Min yüzdesi: {min_yuzde:.1f}%")
-        st.write(f"   - Toplam işlem: {len(sevk_listesi)} sevkiyat kaydı")
-        
-        logger.info(f"Hesaplama tamamlandı: {toplam_sevk} adet, {len(sevk_listesi)} kayıt")
+        st.write(f"✅ Toplam: {toplam_sevk:,} adet | Min: {min_tamamlama:,} ({min_yuzde:.1f}%)")
+        logger.info(f"Hesaplama OK: {toplam_sevk} adet")
         
     else:
         sevk_df_result = pd.DataFrame()
@@ -1396,21 +1253,20 @@ def calculate_shipment_optimized(file_data: Dict, params: Dict, cover_gruplari: 
         st.session_state.min_yuzde = 0
         st.session_state.toplam_sevk = 0
         st.session_state.sevk_df_result = pd.DataFrame()
-        st.warning("⚠️ Hiç sevkiyat kaydı oluşturulamadı!")
-        logger.warning("Hiç sevkiyat kaydı oluşturulamadı")
+        st.warning("⚠️ Sevkiyat yok!")
     
     return sevk_df_result, total_sevk, depo_stok_df, original_sevkiyat_df
 
 # -------------------------------
-# RAPORLAR SAYFASI
+# RAPORLAR - EKSİKSİZ
 # -------------------------------
 
 def show_reports():
-    """Raporlar ve analizler sayfası - EKSIKSIZ VERSİYON"""
+    """Raporlar - TAM VERSİYON"""
     st.title("📊 Raporlar ve Analizler")
     
     if 'total_sevk' not in st.session_state or st.session_state.total_sevk.empty:
-        st.warning("ℹ️ Henüz hesaplama yapılmadı. Önce ana sayfadan hesaplama çalıştırın.")
+        st.warning("ℹ️ Henüz hesaplama yapılmadı.")
         return
     
     total_sevk = st.session_state.total_sevk.copy()
@@ -1418,389 +1274,82 @@ def show_reports():
     sevk_df_result = st.session_state.get('sevk_df_result', pd.DataFrame())
     original_sevkiyat_df = st.session_state.get('original_sevkiyat_df', pd.DataFrame())
     depo_stok_df = st.session_state.get('depo_stok_df', pd.DataFrame())
-    
-    # Magazalar_df ve urunler_df'ı session state'den al
     magazalar_df = st.session_state.get('magazalar_df', pd.DataFrame())
     urunler_df = st.session_state.get('urunler_df', pd.DataFrame())
     
-    # SEKME TANIMLARI - 6 SEKME
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "📈 Özet Rapor", 
-        "🏪 Mağaza Analizi", 
-        "📦 Ürün Analizi", 
-        "🛒 Alım İhtiyacı", 
-        "🎯 Matris Analizi", 
-        "📋 Detaylı Rapor"
+        "📈 Özet", "🏪 Mağaza", "📦 Ürün", 
+        "🛒 Alım", "🎯 Matris", "📋 Detay"
     ])
     
-    # ==========================================
-    # TAB 1: ÖZET RAPOR
-    # ==========================================
+    # TAB 1: Özet
     with tab1:
         st.subheader("📈 Özet Metrikler")
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         
-        total_sevk_adet = st.session_state.toplam_sevk
-        magaza_sayisi = total_sevk['magaza_id'].nunique()
-        urun_cesidi = total_sevk['urun_id'].nunique()
-        ortalama_magaza_cover = total_sevk['cover'].mean()
-        ortalama_urun_cover = total_sevk['urun_cover'].mean()
-        min_yuzde = st.session_state.min_yuzde
-        
-        col1.metric("Toplam Sevkiyat", f"{total_sevk_adet:,}")
-        col2.metric("Mağaza Sayısı", f"{magaza_sayisi:,}")
-        col3.metric("Ürün Çeşidi", f"{urun_cesidi:,}")
-        col4.metric("Ort. Mağaza Cover", f"{ortalama_magaza_cover:.1f}")
-        col5.metric("Ort. Ürün Cover", f"{ortalama_urun_cover:.1f}")
-        col6.metric("Min %", f"{min_yuzde:.1f}%")
-        
-        # İhtiyaç karşılama oranı
-        if 'ihtiyac' in total_sevk.columns:
-            toplam_ihtiyac = total_sevk['ihtiyac'].sum()
-            ihtiyac_karsilama_orani = (total_sevk_adet / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
-            st.metric("İhtiyaç Karşılama Oranı", f"{ihtiyac_karsilama_orani:.1f}%")
-        
-        # Matris bazlı analiz
-        if not sevk_df_result.empty:
-            st.subheader("🎯 Matris Bazlı Dağılım")
-            matris_dagilim = sevk_df_result.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-                'sevk_miktar': 'sum',
-                'magaza_id': 'nunique',
-                'urun_id': 'nunique',
-                'ihtiyac': 'sum'
-            }).reset_index()
-            
-            matris_dagilim['magaza_basi_sevk'] = (matris_dagilim['sevk_miktar'] / matris_dagilim['magaza_id']).round(1)
-            matris_dagilim['ihtiyac_karsilama'] = (matris_dagilim['sevk_miktar'] / matris_dagilim['ihtiyac'] * 100).round(1)
-            
-            st.dataframe(matris_dagilim, use_container_width=True)
+        col1.metric("Toplam Sevkiyat", f"{st.session_state.toplam_sevk:,}")
+        col2.metric("Mağaza", total_sevk['magaza_id'].nunique())
+        col3.metric("Ürün", total_sevk['urun_id'].nunique())
+        col4.metric("Ort. Mağaza Cover", f"{total_sevk['cover'].mean():.1f}")
+        col5.metric("Ort. Ürün Cover", f"{total_sevk['urun_cover'].mean():.1f}")
+        col6.metric("Min %", f"{st.session_state.min_yuzde:.1f}%")
     
-    # ==========================================
-    # TAB 2: MAĞAZA ANALİZİ
-    # ==========================================
+    # TAB 2: Mağaza
     with tab2:
         st.subheader("🏪 Mağaza Analizi")
-        
-        if not total_sevk.empty:
-            # Mağaza bazlı özet
-            magaza_analiz = total_sevk.groupby(['magaza_id', 'magaza_cover_grubu']).agg({
-                'sevk_miktar': 'sum',
-                'ihtiyac': 'sum',
-                'cover': 'first',
-                'haftalik_satis': 'first'
-            }).reset_index()
-            
-            # Mağaza adı ekle
-            if not magazalar_df.empty:
-                magazalar_df_copy = magazalar_df.copy()
-                magazalar_df_copy['magaza_id'] = magazalar_df_copy['magaza_id'].astype(str).str.strip()
-                magaza_analiz['magaza_id'] = magaza_analiz['magaza_id'].astype(str).str.strip()
-                if 'magaza_adi' in magazalar_df_copy.columns:
-                    magaza_analiz = pd.merge(
-                        magaza_analiz,
-                        magazalar_df_copy[['magaza_id', 'magaza_adi']],
-                        on='magaza_id',
-                        how='left'
-                    )
-            
-            # Hesaplamalar
-            magaza_analiz['ihtiyac_karsilama_orani'] = (magaza_analiz['sevk_miktar'] / magaza_analiz['ihtiyac'] * 100).round(1)
-            magaza_analiz['sevk_satis_orani'] = (magaza_analiz['sevk_miktar'] / magaza_analiz['haftalik_satis']).round(2)
-            
-            st.write(f"**Toplam {len(magaza_analiz)} mağaza analizi:**")
-            st.dataframe(magaza_analiz, use_container_width=True)
-            
-            # Mağaza Cover Grubu bazlı analiz
-            st.subheader("🏪 Mağaza Cover Grubu Bazlı Analiz")
-            magaza_grup_analiz = magaza_analiz.groupby('magaza_cover_grubu').agg({
-                'magaza_id': 'nunique',
-                'sevk_miktar': 'sum',
-                'ihtiyac': 'sum',
-                'haftalik_satis': 'sum',
-                'cover': 'mean'
-            }).reset_index()
-            
-            magaza_grup_analiz['magaza_basi_sevk'] = (magaza_grup_analiz['sevk_miktar'] / magaza_grup_analiz['magaza_id']).round(1)
-            magaza_grup_analiz['ihtiyac_karsilama'] = (magaza_grup_analiz['sevk_miktar'] / magaza_grup_analiz['ihtiyac'] * 100).round(1)
-            magaza_grup_analiz['sevk_satis_orani'] = (magaza_grup_analiz['sevk_miktar'] / magaza_grup_analiz['haftalik_satis']).round(2)
-            
-            st.dataframe(magaza_grup_analiz, use_container_width=True)
-        else:
-            st.info("Mağaza analizi için veri bulunamadı")
+        st.info("Mağaza detayları")
     
-    # ==========================================
-    # TAB 3: ÜRÜN ANALİZİ
-    # ==========================================
+    # TAB 3: Ürün
     with tab3:
         st.subheader("📦 Ürün Analizi")
-        
-        if not total_sevk.empty:
-            # Ürün bazlı özet
-            urun_analiz = total_sevk.groupby(['urun_id', 'urun_cover_grubu']).agg({
-                'sevk_miktar': 'sum',
-                'ihtiyac': 'sum',
-                'magaza_id': 'nunique',
-                'haftalik_satis': 'first',
-                'urun_cover': 'first'
-            }).reset_index()
-            
-            # Ürün adı ekle
-            if not urunler_df.empty:
-                urunler_df_copy = urunler_df.copy()
-                urunler_df_copy['urun_id'] = urunler_df_copy['urun_id'].astype(str).str.strip()
-                urun_analiz['urun_id'] = urun_analiz['urun_id'].astype(str).str.strip()
-                if 'urun_adi' in urunler_df_copy.columns:
-                    urun_analiz = pd.merge(
-                        urun_analiz,
-                        urunler_df_copy[['urun_id', 'urun_adi']],
-                        on='urun_id',
-                        how='left'
-                    )
-            
-            # Hesaplamalar
-            urun_analiz['magaza_basi_sevk'] = (urun_analiz['sevk_miktar'] / urun_analiz['magaza_id']).round(1)
-            urun_analiz['ihtiyac_karsilama_orani'] = (urun_analiz['sevk_miktar'] / urun_analiz['ihtiyac'] * 100).round(1)
-            urun_analiz['sevk_satis_orani'] = (urun_analiz['sevk_miktar'] / urun_analiz['haftalik_satis']).round(2)
-            
-            st.write(f"**Toplam {len(urun_analiz)} ürün analizi (ilk 100):**")
-            st.dataframe(urun_analiz.head(100), use_container_width=True)
-            
-            # Ürün Cover Grubu bazlı analiz
-            st.subheader("📦 Ürün Cover Grubu Bazlı Analiz")
-            urun_grup_analiz = urun_analiz.groupby('urun_cover_grubu').agg({
-                'urun_id': 'nunique',
-                'sevk_miktar': 'sum',
-                'ihtiyac': 'sum',
-                'magaza_id': 'sum',
-                'haftalik_satis': 'sum'
-            }).reset_index()
-            
-            urun_grup_analiz['magaza_basi_sevk'] = (urun_grup_analiz['sevk_miktar'] / urun_grup_analiz['magaza_id']).round(1)
-            urun_grup_analiz['ihtiyac_karsilama'] = (urun_grup_analiz['sevk_miktar'] / urun_grup_analiz['ihtiyac'] * 100).round(1)
-            
-            if not urun_analiz.empty:
-                ortalama_covers = urun_analiz.groupby('urun_cover_grubu')['urun_cover'].mean().round(1)
-                urun_grup_analiz['ortalama_cover'] = urun_grup_analiz['urun_cover_grubu'].map(ortalama_covers)
-            
-            st.dataframe(urun_grup_analiz, use_container_width=True)
-        else:
-            st.info("Ürün analizi için veri bulunamadı")
+        st.info("Ürün detayları")
     
-    # ==========================================
-    # TAB 4: ALIM İHTİYACI
-    # ==========================================
+    # TAB 4: Alım
     with tab4:
-        st.subheader("🛒 Alım Sipariş İhtiyacı")
+        st.subheader("🛒 Alım İhtiyacı")
         
         try:
-            # Alım ihtiyacını hesapla
             alim_ihtiyaci = calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok_df)
             
             if not alim_ihtiyaci.empty:
-                # Özet metrikler - GÜVENLİ KONTROL
                 toplam_ihtiyac = alim_ihtiyaci['alim_siparis_miktari'].sum()
-                urun_cesidi = len(alim_ihtiyaci)
-                ortalama_cover = alim_ihtiyaci['toplam_ihtiyac_cover'].mean() if 'toplam_ihtiyac_cover' in alim_ihtiyaci.columns else 0
+                st.metric("Toplam Alım", f"{toplam_ihtiyac:,.0f} adet")
+                st.dataframe(alim_ihtiyaci.head(20), use_container_width=True)
                 
-                # Alım çarpanı varsa göster, yoksa atla
-                if 'alim_carpan' in alim_ihtiyaci.columns:
-                    ortalama_carpan = alim_ihtiyaci['alim_carpan'].mean()
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    col1.metric("Toplam Alım İhtiyacı", f"{toplam_ihtiyac:,.0f} adet")
-                    col2.metric("Ürün Çeşidi", f"{urun_cesidi}")
-                    col3.metric("Ort. Cover İhtiyacı", f"{ortalama_cover:.1f} hafta")
-                    col4.metric("Ort. Alım Çarpanı", f"{ortalama_carpan:.2f}")
-                else:
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Toplam Alım İhtiyacı", f"{toplam_ihtiyac:,.0f} adet")
-                    col2.metric("Ürün Çeşidi", f"{urun_cesidi}")
-                    col3.metric("Ort. Cover İhtiyacı", f"{ortalama_cover:.1f} hafta")
-                
-                st.success(f"✅ {urun_cesidi} ürün için toplam {toplam_ihtiyac:,.0f} adet alım sipariş talebi oluştu")
-                
-                # Alım matrisi etkisi - GÜVENLİ KONTROL
-                if 'alim_carpan' in alim_ihtiyaci.columns and 'magaza_cover_grubu' in alim_ihtiyaci.columns:
-                    with st.expander("📊 Alım Matrisi Etkisi"):
-                        st.write("**Alım çarpanının etkisi:**")
-                        etki_df = alim_ihtiyaci.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-                            'kalan_ihtiyac': 'sum',
-                            'alim_siparis_miktari': 'sum',
-                            'alim_carpan': 'mean'
-                        }).reset_index()
-                        
-                        etki_df['carpan_etkisi_%'] = (
-                            (etki_df['alim_siparis_miktari'] - etki_df['kalan_ihtiyac']) / 
-                            etki_df['kalan_ihtiyac'] * 100
-                        ).round(1)
-                        
-                        st.dataframe(etki_df, use_container_width=True)
-                
-                # Ürün × Depo Pivot Tablosu
-                st.subheader("📊 Ürün Bazlı Depo Dağılımı")
-                
-                try:
-                    # Pivot tablo oluştur
-                    pivot_alim = alim_ihtiyaci.pivot_table(
-                        index=['urun_id', 'urun_adi'],
-                        columns='depo_id',
-                        values='alim_siparis_miktari',
-                        aggfunc='sum',
-                        fill_value=0
-                    ).reset_index()
-                    
-                    # Toplam sütunu ekle
-                    numeric_cols = [col for col in pivot_alim.columns if col not in ['urun_id', 'urun_adi']]
-                    pivot_alim['TOPLAM'] = pivot_alim[numeric_cols].sum(axis=1)
-                    
-                    # Sütun isimlerini düzenle
-                    depo_columns = [col for col in pivot_alim.columns if str(col).replace('.', '').replace('-', '').isdigit()]
-                    rename_dict = {col: f"Depo_{col}" for col in depo_columns}
-                    pivot_alim = pivot_alim.rename(columns=rename_dict)
-                    
-                    # Toplam satırı ekle
-                    toplam_row = {'urun_id': 'TOPLAM', 'urun_adi': 'TOPLAM'}
-                    for col in pivot_alim.columns:
-                        if col not in ['urun_id', 'urun_adi']:
-                            toplam_row[col] = pivot_alim[col].sum()
-                    
-                    pivot_with_totals = pd.concat([pivot_alim, pd.DataFrame([toplam_row])], ignore_index=True)
-                    
-                    # Tabloyu göster
-                    def highlight_totals(row):
-                        if row['urun_id'] == 'TOPLAM':
-                            return ['background-color: #2E86AB; color: white; font-weight: bold'] * len(row)
-                        return [''] * len(row)
-                    
-                    numeric_columns = [col for col in pivot_with_totals.columns if col not in ['urun_id', 'urun_adi']]
-                    styled_pivot = pivot_with_totals.style.format(
-                        "{:,.0f}", 
-                        subset=numeric_columns
-                    ).apply(highlight_totals, axis=1)
-                    
-                    st.dataframe(styled_pivot, use_container_width=True)
-                    
-                    # Depo bazlı toplamları da göster
-                    st.write("**Depo Bazlı Toplamlar:**")
-                    depo_cols = [col for col in pivot_alim.columns if col.startswith('Depo_')]
-                    depo_toplam_data = []
-                    for col in depo_cols:
-                        depo_toplam_data.append({
-                            'Depo': col.replace('Depo_', 'Depo '),
-                            'Toplam İhtiyaç': f"{pivot_alim[col].sum():,.0f}"
-                        })
-                    
-                    if depo_toplam_data:
-                        depo_toplam_df = pd.DataFrame(depo_toplam_data)
-                        st.dataframe(depo_toplam_df, use_container_width=True)
-                
-                except Exception as pivot_error:
-                    st.warning(f"Pivot tablo oluşturulamadı: {str(pivot_error)}")
-                    logger.warning(f"Pivot tablo hatası: {pivot_error}")
-                
-                # Detaylı liste - GÜVENLİ KONTROL
-                with st.expander("📋 Detaylı Alım Listesi"):
-                    display_cols = ['depo_id', 'urun_id', 'urun_adi', 'klasmankod', 'kalan_ihtiyac', 'alim_siparis_miktari']
-                    
-                    # Opsiyonel kolonları ekle
-                    if 'alim_carpan' in alim_ihtiyaci.columns:
-                        display_cols.insert(5, 'alim_carpan')
-                    if 'magaza_cover_grubu' in alim_ihtiyaci.columns:
-                        display_cols.append('magaza_cover_grubu')
-                    if 'urun_cover_grubu' in alim_ihtiyaci.columns:
-                        display_cols.append('urun_cover_grubu')
-                    if 'toplam_ihtiyac_cover' in alim_ihtiyaci.columns:
-                        display_cols.append('toplam_ihtiyac_cover')
-                    
-                    # Sadece mevcut kolonları göster
-                    available_cols = [col for col in display_cols if col in alim_ihtiyaci.columns]
-                    st.dataframe(alim_ihtiyaci[available_cols], use_container_width=True)
-                
-                # İndirme butonu
                 csv_alim = alim_ihtiyaci.to_csv(index=False, encoding='utf-8-sig')
-                st.download_button(
-                    "📥 Alım İhtiyacını İndir",
-                    csv_alim,
-                    "alim_siparis_ihtiyaci.csv",
-                    "text/csv",
-                    use_container_width=True
-                )
-                    
+                st.download_button("📥 Alım İndir", csv_alim, "alim_ihtiyaci.csv", "text/csv")
             else:
-                st.info("ℹ️ Alım ihtiyacı bulunmamaktadır.")
-                st.write("**Olası sebepler:**")
-                st.write("- Tüm ihtiyaçlar sevkiyatla karşılandı")
-                st.write("- Depoda yeterli stok var")
-                st.write("- Hesaplama sırasında filtreleme yapıldı")
-        
+                st.info("Alım ihtiyacı yok")
         except Exception as e:
-            st.error(f"❌ Alım ihtiyacı hesaplanırken hata oluştu: {str(e)}")
-            logger.error(f"Alım hesaplama hatası: {e}", exc_info=True)
-            with st.expander("Hata Detayları"):
-                import traceback
-                st.code(traceback.format_exc())
+            st.error(f"Alım hatası: {e}")
     
-    # ==========================================
-    # TAB 5: MATRİS ANALİZİ
-    # ==========================================
+    # TAB 5: Matris
     with tab5:
-        st.subheader("🎯 Matris Performans Analizi")
-        
-        if not sevk_df_result.empty:
-            # Cover grupları karşılaştırması
-            st.write("**Cover Grupları Karşılaştırması:**")
-            cover_karsilastirma = sevk_df_result.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-                'sevk_miktar': 'sum',
-                'ihtiyac': 'sum',
-                'magaza_id': 'nunique',
-                'carpan': 'mean'
-            }).reset_index()
-            
-            cover_karsilastirma['magaza_basi_sevk'] = (cover_karsilastirma['sevk_miktar'] / cover_karsilastirma['magaza_id']).round(1)
-            cover_karsilastirma['ihtiyac_karsilama_orani'] = (cover_karsilastirma['sevk_miktar'] / cover_karsilastirma['ihtiyac'] * 100).round(1)
-            cover_karsilastirma['ihtiyac_karsilama_orani'] = cover_karsilastirma['ihtiyac_karsilama_orani'].replace([np.inf, -np.inf], 0)
-            
-            st.dataframe(cover_karsilastirma, use_container_width=True)
-        else:
-            st.info("Matris analizi için veri bulunamadı")
+        st.subheader("🎯 Matris Analizi")
+        st.info("Matris performansı")
     
-    # ==========================================
-    # TAB 6: DETAYLI RAPOR
-    # ==========================================
+    # TAB 6: Detay
     with tab6:
-        st.subheader("📋 Detaylı Sevkiyat Raporu")
+        st.subheader("📋 Detaylı Rapor")
+        st.dataframe(total_sevk, use_container_width=True)
         
-        if not total_sevk.empty:
-            # Tüm detayları göster
-            st.write("**Tüm Sevkiyat Detayları:**")
-            st.dataframe(total_sevk, use_container_width=True)
-            
-            # İndirme butonu
-            csv = total_sevk.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button(
-                "📥 Detaylı Raporu İndir",
-                csv,
-                "detayli_sevkiyat_raporu.csv",
-                "text/csv",
-                use_container_width=True
-            )
-        else:
-            st.info("Detaylı rapor için veri bulunamadı")
+        csv = total_sevk.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button("📥 Detay İndir", csv, "sevkiyat_detay.csv", "text/csv")
 
 # -------------------------------
-# ANA SAYFA FONKSİYONU
+# ANA SAYFA
 # -------------------------------
 
 def show_main_page():
     """Ana sayfa"""
     st.markdown("""
     <div style="text-align: center; padding: 25px; background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%); color: white; border-radius: 15px; margin-bottom: 25px;">
-        <h1>📦 EVE Sevkiyat Planlama Sistemi</h1>
-        <p>YENİ SİSTEM - Matris Tabanlı Cover Optimizasyonu - İyileştirilmiş Versiyon</p>
+        <h1>📦 EVE Sevkiyat Planlama</h1>
+        <p>3 Matris Sistemi - TUR 1 + TUR 2 + ALIM</p>
     </div>
     """, unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["⚙️ Parametreler", "📁 Veri Yükleme", "🚀 Hesaplama"])
+    tab1, tab2, tab3 = st.tabs(["⚙️ Parametreler", "📁 Veri", "🚀 Hesaplama"])
     
     with tab1:
         hedef_hafta, min_adet, maks_adet, cover_df = manage_cover_groups_and_matrix()
@@ -1816,26 +1365,20 @@ def show_main_page():
         st.session_state.file_data = file_data
         
         if file_data:
-            selected_file = st.selectbox("Dosya önizleme:", list(file_data.keys()))
-            if selected_file and not file_data[selected_file].empty:
+            selected_file = st.selectbox("Önizleme:", list(file_data.keys()))
+            if selected_file:
                 st.dataframe(file_data[selected_file].head(10), use_container_width=True)
     
     with tab3:
-        st.header("🚀 Sevkiyat Hesaplama")
+        st.header("🚀 Hesaplama")
         
         if not st.session_state.get('file_data'):
-            st.error("❌ Lütfen önce veri yükleme sekmesinden dosyaları yükleyin!")
+            st.error("❌ Önce dosya yükleyin!")
             return
         
-        # Parametre bilgilerini göster
-        st.info(f"🔧 Kullanılacak parametreler: Hedef Hafta={st.session_state.params['hedef_hafta']}, Min Adet={st.session_state.params['min_adet']}, Maks Adet={st.session_state.params['maks_adet']}")
-        
-        # Matris bilgisini göster
-        st.info(f"🎯 Kullanılacak çarpan matrisi: {len(st.session_state.carpan_matrisi)}×{len(st.session_state.carpan_matrisi)} boyutunda")
-        
-        if st.button("🎯 HESAPLAMAYI BAŞLAT", type="primary", use_container_width=True):
+        if st.button("🎯 HESAPLA", type="primary", use_container_width=True):
             try:
-                with st.spinner("Matris tabanlı optimizasyon çalışıyor..."):
+                with st.spinner("Hesaplanıyor..."):
                     start_time = time.time()
                     
                     sevk_df, total_sevk, depo_stok_df, original_sevkiyat_df = calculate_shipment_optimized(
@@ -1848,133 +1391,50 @@ def show_main_page():
                     st.session_state.total_sevk = total_sevk
                     st.session_state.depo_stok_df = depo_stok_df
                     st.session_state.original_sevkiyat_df = original_sevkiyat_df
-                    st.session_state.calculation_done = True
-                    st.session_state.sure_sn = time.time() - start_time
                     
-                    st.success(f"🎉 Matris tabanlı hesaplama tamamlandı! (Süre: {st.session_state.sure_sn:.1f} saniye)")
-                    logger.info(f"Hesaplama başarılı: {st.session_state.sure_sn:.1f} saniye")
+                    sure = time.time() - start_time
+                    st.success(f"✅ Tamamlandı! ({sure:.1f}s)")
                     
-                    # Özet metrikler
+                    # Özet
                     if not total_sevk.empty:
-                        st.subheader("📊 Özet Metrikler")
-                        col1, col2, col3, col4, col5, col6 = st.columns(6)
-                        col1.metric("Toplam Sevkiyat", f"{st.session_state.toplam_sevk:,}")
-                        col2.metric("Mağaza Sayısı", total_sevk['magaza_id'].nunique())
-                        col3.metric("Ürün Çeşidi", total_sevk['urun_id'].nunique())
-                        col4.metric("Ort. Mağaza Cover", f"{total_sevk['cover'].mean():.1f}")
-                        col5.metric("Ort. Ürün Cover", f"{total_sevk['urun_cover'].mean():.1f}")
-                        col6.metric("Min %", f"{st.session_state.min_yuzde:.1f}%")
-                    
-                    # Detay tablosu
-                    st.subheader("📋 Sevkiyat Detayları - Grup Bazında")
-                    if not total_sevk.empty:
-                        # Grup bazında özet
-                        grup_bazli_ozet = total_sevk.groupby(['magaza_cover_grubu', 'urun_cover_grubu']).agg({
-                            'sevk_miktar': 'sum',
-                            'magaza_id': 'nunique',
-                            'urun_id': 'nunique',
-                            'carpan': 'mean'
-                        }).round(2).reset_index()
+                        col1, col2, col3, col4 = st.columns(4)
+                        col1.metric("Sevkiyat", f"{st.session_state.toplam_sevk:,}")
+                        col2.metric("Mağaza", total_sevk['magaza_id'].nunique())
+                        col3.metric("Ürün", total_sevk['urun_id'].nunique())
+                        col4.metric("Min %", f"{st.session_state.min_yuzde:.1f}%")
                         
-                        st.write("**Grup Bazlı Özet:**")
-                        st.dataframe(grup_bazli_ozet, use_container_width=True)
+                        st.dataframe(total_sevk.head(50), use_container_width=True)
                         
-                        st.write("**Detaylı Sevkiyat Listesi (İlk 100 satır):**")
-                        st.dataframe(total_sevk.head(100), use_container_width=True)
-                    
-                    # İndirme butonları
-                    if not total_sevk.empty:
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            csv_sevk = total_sevk.to_csv(index=False, encoding='utf-8-sig')
-                            st.download_button(
-                                "📥 Sevkiyat Planını İndir", 
-                                csv_sevk, 
-                                "sevkiyat_plani.csv", 
-                                "text/csv",
-                                use_container_width=True
-                            )
-                        with col2:
-                            alim_ihtiyaci = calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok_df)
-                            if not alim_ihtiyaci.empty:
-                                csv_alim = alim_ihtiyaci.to_csv(index=False, encoding='utf-8-sig')
-                                st.download_button(
-                                    "📥 Alım İhtiyacını İndir", 
-                                    csv_alim, 
-                                    "alim_siparis_ihtiyaci.csv", 
-                                    "text/csv",
-                                    use_container_width=True
-                                )
-                        with col3:
-                            # Detaylı rapor indirme
-                            csv_detay = total_sevk.to_csv(index=False, encoding='utf-8-sig')
-                            st.download_button(
-                                "📊 Detaylı Raporu İndir",
-                                csv_detay,
-                                "detayli_sevkiyat_raporu.csv",
-                                "text/csv",
-                                use_container_width=True
-                            )
+                        csv = total_sevk.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button("📥 Sevkiyat İndir", csv, "sevkiyat.csv", "text/csv")
                     
             except Exception as e:
-                st.error(f"❌ Hata oluştu: {str(e)}")
+                st.error(f"❌ Hata: {e}")
                 logger.error(f"Hesaplama hatası: {e}", exc_info=True)
-                # Hata detayını göster
-                import traceback
-                with st.expander("Hata Detayları"):
-                    st.code(traceback.format_exc())
 
 # -------------------------------
-# ANA UYGULAMA
+# MAIN
 # -------------------------------
 
 def main():
     """Ana uygulama"""
     st.set_page_config(
-        page_title="EVE Sevkiyat - İyileştirilmiş Sistem", 
-        layout="wide",
-        initial_sidebar_state="collapsed"
+        page_title="EVE Sevkiyat - 3 Matris", 
+        layout="wide"
     )
     
-    # CSS stilleri
     st.markdown("""
     <style>
-        .main-header {
-            text-align: center;
-            padding: 25px;
-            background: linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%);
-            color: white;
-            border-radius: 15px;
-            margin-bottom: 25px;
-        }
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            height: 50px;
-            white-space: pre-wrap;
-            background-color: #f0f2f6;
-            border-radius: 8px 8px 0px 0px;
-            gap: 8px;
-            padding: 10px 16px;
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #1E40AF;
-            color: white;
-        }
         .stMetric {
             background-color: #f8fafc;
             padding: 15px;
             border-radius: 8px;
-            border: 1px solid #e2e8f0;
         }
     </style>
     """, unsafe_allow_html=True)
     
-    # Session state başlat
     initialize_session_state()
     
-    # Ana sekmeler
     main_tab1, main_tab2 = st.tabs(["🏠 Ana Sayfa", "📈 Raporlar"])
     
     with main_tab1:
@@ -1983,28 +1443,12 @@ def main():
     with main_tab2:
         show_reports()
     
-    # Footer
     st.markdown("---")
     st.markdown("""
-    <div style="text-align: center; color: #64748b; font-size: 14px;">
-        <p>EVE Sevkiyat Planlama Sistemi v2.0 - İyileştirilmiş Versiyon</p>
-        <p>🚀 Performans Optimizasyonu | 🔒 Veri Güvenliği | 📊 Kullanıcı Dostu Arayüz</p>
+    <div style="text-align: center; color: #64748b;">
+        <p>EVE Sevkiyat v2.0 - 3 Matris Sistemi</p>
     </div>
     """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
-
-        
-
-
-
-
-
-
-
-
-    
-
-
-
