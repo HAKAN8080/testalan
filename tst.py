@@ -1294,11 +1294,208 @@ def show_reports():
         col5.metric("Ort. Ürün Cover", f"{total_sevk['urun_cover'].mean():.1f}")
         col6.metric("Min %", f"{st.session_state.min_yuzde:.1f}%")
     
-    # TAB 2: Mağaza
+   # TAB 2: Mağaza Analizi - EKSİKSİZ
     with tab2:
         st.subheader("🏪 Mağaza Analizi")
-        st.info("Mağaza detayları")
-    
+        
+        if not total_sevk.empty:
+            # Mağaza bazlı özet
+            magaza_analiz = total_sevk.groupby(['magaza_id', 'magaza_cover_grubu']).agg({
+                'sevk_miktar': 'sum',
+                'ihtiyac': 'sum',
+                'cover': 'first',
+                'haftalik_satis': 'sum',
+                'urun_id': 'nunique'
+            }).reset_index()
+            
+            magaza_analiz.columns = ['magaza_id', 'magaza_cover_grubu', 'sevk_miktar', 
+                                     'ihtiyac', 'cover', 'haftalik_satis', 'urun_cesidi']
+            
+            # Mağaza adı ekle
+            if not magazalar_df.empty:
+                magazalar_df_copy = magazalar_df.copy()
+                magazalar_df_copy['magaza_id'] = magazalar_df_copy['magaza_id'].astype(str).str.strip()
+                magaza_analiz['magaza_id'] = magaza_analiz['magaza_id'].astype(str).str.strip()
+                if 'magaza_adi' in magazalar_df_copy.columns:
+                    magaza_analiz = pd.merge(
+                        magaza_analiz,
+                        magazalar_df_copy[['magaza_id', 'magaza_adi']],
+                        on='magaza_id',
+                        how='left'
+                    )
+                    # Sütun sırasını düzenle
+                    cols = ['magaza_id', 'magaza_adi'] + [col for col in magaza_analiz.columns if col not in ['magaza_id', 'magaza_adi']]
+                    magaza_analiz = magaza_analiz[cols]
+            
+            # Hesaplamalar
+            magaza_analiz['ihtiyac_karsilama_%'] = (
+                (magaza_analiz['sevk_miktar'] / magaza_analiz['ihtiyac'] * 100)
+                .fillna(0)
+                .replace([np.inf, -np.inf], 0)
+                .round(1)
+            )
+            
+            magaza_analiz['urun_basi_sevk'] = (
+                magaza_analiz['sevk_miktar'] / magaza_analiz['urun_cesidi']
+            ).round(1)
+            
+            magaza_analiz['haftalik_cover'] = (
+                magaza_analiz['sevk_miktar'] / magaza_analiz['haftalik_satis']
+            ).fillna(0).round(1)
+            
+            # Sıralama
+            magaza_analiz = magaza_analiz.sort_values('sevk_miktar', ascending=False)
+            
+            # Genel Özet
+            st.write("**📊 Mağaza Özet İstatistikleri:**")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Toplam Mağaza", len(magaza_analiz))
+            col2.metric("Ortalama Sevkiyat", f"{magaza_analiz['sevk_miktar'].mean():,.0f}")
+            col3.metric("En Yüksek Sevkiyat", f"{magaza_analiz['sevk_miktar'].max():,.0f}")
+            col4.metric("Ort. Cover", f"{magaza_analiz['cover'].mean():.1f}")
+            
+            st.markdown("---")
+            
+            # Filtreler
+            st.write("**🔍 Filtreler:**")
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+            
+            with filter_col1:
+                cover_grubu_filter = st.multiselect(
+                    "Cover Grubu",
+                    options=magaza_analiz['magaza_cover_grubu'].unique(),
+                    default=None,
+                    key="magaza_cover_filter"
+                )
+            
+            with filter_col2:
+                min_sevk_filter = st.number_input(
+                    "Min Sevkiyat",
+                    min_value=0,
+                    value=0,
+                    step=10,
+                    key="min_sevk_filter"
+                )
+            
+            with filter_col3:
+                arama = st.text_input("Mağaza Ara (ID veya Ad)", key="magaza_arama")
+            
+            # Filtreleme uygula
+            filtered_magaza = magaza_analiz.copy()
+            
+            if cover_grubu_filter:
+                filtered_magaza = filtered_magaza[filtered_magaza['magaza_cover_grubu'].isin(cover_grubu_filter)]
+            
+            if min_sevk_filter > 0:
+                filtered_magaza = filtered_magaza[filtered_magaza['sevk_miktar'] >= min_sevk_filter]
+            
+            if arama:
+                if 'magaza_adi' in filtered_magaza.columns:
+                    filtered_magaza = filtered_magaza[
+                        filtered_magaza['magaza_id'].astype(str).str.contains(arama, case=False) |
+                        filtered_magaza['magaza_adi'].astype(str).str.contains(arama, case=False, na=False)
+                    ]
+                else:
+                    filtered_magaza = filtered_magaza[
+                        filtered_magaza['magaza_id'].astype(str).str.contains(arama, case=False)
+                    ]
+            
+            st.write(f"**📋 Mağaza Detayları ({len(filtered_magaza)} mağaza):**")
+            
+            # Renkli gösterim için stil
+            def highlight_low_coverage(row):
+                if row['ihtiyac_karsilama_%'] < 50:
+                    return ['background-color: #fee2e2'] * len(row)
+                elif row['ihtiyac_karsilama_%'] < 80:
+                    return ['background-color: #fef3c7'] * len(row)
+                else:
+                    return ['background-color: #d1fae5'] * len(row)
+            
+            styled_magaza = filtered_magaza.style\
+                .format({
+                    'sevk_miktar': '{:,.0f}',
+                    'ihtiyac': '{:,.0f}',
+                    'haftalik_satis': '{:,.0f}',
+                    'cover': '{:.1f}',
+                    'ihtiyac_karsilama_%': '{:.1f}%',
+                    'urun_basi_sevk': '{:.1f}',
+                    'haftalik_cover': '{:.1f}'
+                })\
+                .apply(highlight_low_coverage, axis=1)
+            
+            st.dataframe(styled_magaza, use_container_width=True, hide_index=True)
+            
+            # Cover Grubu Analizi
+            st.markdown("---")
+            st.subheader("📊 Mağaza Cover Grubu Bazlı Analiz")
+            
+            magaza_grup_analiz = magaza_analiz.groupby('magaza_cover_grubu').agg({
+                'magaza_id': 'nunique',
+                'sevk_miktar': 'sum',
+                'ihtiyac': 'sum',
+                'haftalik_satis': 'sum',
+                'cover': 'mean',
+                'urun_cesidi': 'mean'
+            }).reset_index()
+            
+            magaza_grup_analiz.columns = ['Cover Grubu', 'Mağaza Sayısı', 'Toplam Sevkiyat', 
+                                          'Toplam İhtiyaç', 'Toplam Satış', 'Ort. Cover', 'Ort. Ürün Çeşidi']
+            
+            magaza_grup_analiz['Mağaza Başı Sevk'] = (
+                magaza_grup_analiz['Toplam Sevkiyat'] / magaza_grup_analiz['Mağaza Sayısı']
+            ).round(1)
+            
+            magaza_grup_analiz['İhtiyaç Karşılama %'] = (
+                (magaza_grup_analiz['Toplam Sevkiyat'] / magaza_grup_analiz['Toplam İhtiyaç'] * 100)
+                .fillna(0)
+                .replace([np.inf, -np.inf], 0)
+                .round(1)
+            )
+            
+            st.dataframe(
+                magaza_grup_analiz.style.format({
+                    'Mağaza Sayısı': '{:,.0f}',
+                    'Toplam Sevkiyat': '{:,.0f}',
+                    'Toplam İhtiyaç': '{:,.0f}',
+                    'Toplam Satış': '{:,.0f}',
+                    'Ort. Cover': '{:.1f}',
+                    'Ort. Ürün Çeşidi': '{:.1f}',
+                    'Mağaza Başı Sevk': '{:.1f}',
+                    'İhtiyaç Karşılama %': '{:.1f}%'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Top 10 ve Bottom 10
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**🏆 En Yüksek Sevkiyat (Top 10):**")
+                top10 = filtered_magaza.head(10)[['magaza_id'] + 
+                    (['magaza_adi'] if 'magaza_adi' in filtered_magaza.columns else []) +
+                    ['sevk_miktar', 'cover', 'magaza_cover_grubu']]
+                st.dataframe(top10, use_container_width=True, hide_index=True)
+            
+            with col2:
+                st.write("**⚠️ En Düşük Sevkiyat (Bottom 10):**")
+                bottom10 = filtered_magaza.tail(10)[['magaza_id'] + 
+                    (['magaza_adi'] if 'magaza_adi' in filtered_magaza.columns else []) +
+                    ['sevk_miktar', 'cover', 'magaza_cover_grubu']]
+                st.dataframe(bottom10, use_container_width=True, hide_index=True)
+            
+            # İndirme
+            csv_magaza = filtered_magaza.to_csv(index=False, encoding='utf-8-sig')
+            st.download_button(
+                "📥 Mağaza Analizini İndir",
+                csv_magaza,
+                "magaza_analizi.csv",
+                "text/csv",
+                use_container_width=True
+            )
+        else:
+            st.info("Mağaza analizi için veri yok")
+            
     # TAB 3: Ürün
     with tab3:
         st.subheader("📦 Ürün Analizi")
@@ -1452,3 +1649,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
