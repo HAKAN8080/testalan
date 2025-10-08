@@ -2145,3 +2145,4 @@ def manage_cover_groups_and_matrix():
             st.rerun()
     
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
+
