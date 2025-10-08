@@ -793,7 +793,8 @@ def manage_cover_groups_and_matrix():
             st.success("✅ Varsayılan değerlere dönüldü!")
             st.rerun()
     
-    return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df 
+    return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
+
 
 # -------------------------------
 # RAPORLAR - EKSİKSİZ
@@ -2136,7 +2137,3 @@ def manage_cover_groups_and_matrix():
             st.rerun()
     
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
-
-
-
-
