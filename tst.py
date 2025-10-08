@@ -795,10 +795,6 @@ def manage_cover_groups_and_matrix():
     
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
 
-# -------------------------------
-# RAPORLAR - EKSİKSİZ
-# -------------------------------
-
 def show_reports():
     """Raporlar - TAM VERSİYON"""
     
@@ -831,7 +827,7 @@ def show_reports():
         col5.metric("Ort. Ürün Cover", f"{total_sevk['urun_cover'].mean():.1f}")
         col6.metric("Min %", f"{st.session_state.min_yuzde:.1f}%")
     
-   # TAB 2: Mağaza Analizi - EKSİKSİZ
+    # TAB 2: Mağaza Analizi - EKSİKSİZ
     with tab2:
         st.subheader("🏪 Mağaza Analizi")
         
@@ -1033,7 +1029,7 @@ def show_reports():
         else:
             st.info("Mağaza analizi için veri yok")
             
-# TAB 3: Ürün Analizi - EKSİKSİZ
+    # TAB 3: Ürün Analizi - EKSİKSİZ
     with tab3:
         st.subheader("📦 Ürün Analizi")
         
@@ -1349,13 +1345,7 @@ def show_reports():
             "sevkiyat_detay.csv",
             "text/csv",
             use_container_width=True
-        )import streamlit as st
-import pandas as pd
-import numpy as np
-import time
-import io
-import logging
-from typing import Dict, List, Tuple, Optional
+        )
 
 # -------------------------------
 # LOGGING YAPILANDIRMASI
@@ -2145,4 +2135,5 @@ def manage_cover_groups_and_matrix():
             st.rerun()
     
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
+
 
