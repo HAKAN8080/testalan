@@ -795,7 +795,6 @@ def manage_cover_groups_and_matrix():
     
     return default_hedef_hafta, default_min_adet, default_maks_adet, edited_df
 
-
 # -------------------------------
 # RAPORLAR - EKSİKSİZ
 # -------------------------------
@@ -966,6 +965,15 @@ def show_reports():
             # Cover Grubu Analizi
             st.markdown("---")
             st.subheader("📊 Mağaza Cover Grubu Bazlı Analiz")
+            
+            magaza_grup_analiz = magaza_analiz.groupby('magaza_cover_grubu').agg({
+                'magaza_id': 'nunique',
+                'sevk_miktar': 'sum',
+                'ihtiyac': 'sum',
+                'haftalik_satis': 'sum',
+                'cover': 'mean',
+                'urun_cesidi': 'mean'
+            }).reset_index()
             
             magaza_grup_analiz.columns = ['Cover Grubu', 'Mağaza Sayısı', 'Toplam Sevkiyat', 
                                           'Toplam İhtiyaç', 'Toplam Satış', 'Ort. Cover', 'Ort. Ürün Çeşidi']
