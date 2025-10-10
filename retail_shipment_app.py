@@ -838,7 +838,7 @@ elif menu == "📊 Sıralama":
         # Kaydet
         col1, col2 = st.columns([1, 4])
         with col1:
-            if st.button("💾 Sıralamayı Kaydet", type="primary"):
+            if st.button("💾 Kaydet", type="primary"):
                 st.session_state.siralama_data = edited_siralama
                 st.success("✅ Sıralama öncelikleri kaydedildi!")
         
