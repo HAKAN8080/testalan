@@ -861,7 +861,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
+    }   
     
     missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
@@ -1573,11 +1573,12 @@ elif menu == "📈 Raporlar":
         result_df = st.session_state.sevkiyat_sonuc.copy()
         
         # Tab'lar oluştur
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "🏷️ Marka Analizi",
             "📦 Mal Grubu Analizi", 
             "🏪 Mağaza Analizi",
-            "⚠️ Satış Kaybı Analizi"
+            "⚠️ Satış Kaybı Analizi",
+            "🆕 Yeni Ürün Dağılım Raporu"
         ])
         
         # ============================================
@@ -1813,3 +1814,109 @@ elif menu == "📈 Raporlar":
                 )
             else:
                 st.success("✅ Hiç stok yokluğu kaynaklı satış kaybı yok!")
+        
+        # ============================================
+        # YENİ ÜRÜN DAĞILIM RAPORU
+        # ============================================
+        with tab5:
+            st.subheader("🆕 Yeni Ürün Dağılım Raporu")
+            
+            # Yeni ürün listesi var mı kontrol et
+            if st.session_state.yeni_urun_listesi is None:
+                st.warning("⚠️ Henüz yeni ürün tespiti yapılmadı!")
+                st.info("Lütfen önce 'Yeni Ürün Sevkiyatı' menüsünden yeni ürünleri tespit edin.")
+            else:
+                yeni_urun_kodlari = st.session_state.yeni_urun_listesi['urun_kod'].astype(str).tolist()
+                
+                # Sadece Initial (yeni ürün) sevkiyatlarını filtrele
+                initial_df = result_df[result_df['durum'] == 'Initial'].copy()
+                
+                if len(initial_df) > 0:
+                    st.success(f"✅ {len(yeni_urun_kodlari)} yeni ürün için sevkiyat yapıldı!")
+                    
+                    # Ürün bazında analiz
+                    yeni_urun_analiz = []
+                    
+                    for urun_kod in yeni_urun_kodlari:
+                        # Bu ürünün Initial sevkiyatları
+                        urun_sevk = initial_df[initial_df['urun_kod'].astype(str) == str(urun_kod)]
+                        
+                        if len(urun_sevk) > 0:
+                            # Başlangıç durumu (yeni ürün listesinden)
+                            baslangic = st.session_state.yeni_urun_listesi[
+                                st.session_state.yeni_urun_listesi['urun_kod'].astype(str) == str(urun_kod)
+                            ]
+                            
+                            onceki_magaza = baslangic['stoklu_magaza_sayisi'].values[0] if len(baslangic) > 0 else 0
+                            depo_stok = baslangic['depo_stok_toplam'].values[0] if len(baslangic) > 0 else 0
+                            
+                            # Sevkiyat sonrası
+                            sonraki_magaza = urun_sevk['magaza_kod'].nunique()
+                            toplam_sevkiyat = urun_sevk['sevkiyat_miktari'].sum()
+                            
+                            # Ürün bilgisi
+                            urun_ad = urun_sevk['urun_ad'].iloc[0] if 'urun_ad' in urun_sevk.columns else urun_kod
+                            
+                            yeni_urun_analiz.append({
+                                'Ürün Kodu': urun_kod,
+                                'Ürün Adı': urun_ad,
+                                'Önceki Mağaza': int(onceki_magaza),
+                                'Sevkiyat Yapılan Mağaza': sonraki_magaza,
+                                'Artış': sonraki_magaza - int(onceki_magaza),
+                                'Toplam Sevkiyat': int(toplam_sevkiyat),
+                                'Depo Stok': int(depo_stok),
+                                'Kalan Depo': int(depo_stok - toplam_sevkiyat)
+                            })
+                    
+                    if len(yeni_urun_analiz) > 0:
+                        analiz_df = pd.DataFrame(yeni_urun_analiz)
+                        analiz_df = analiz_df.sort_values('Artış', ascending=False)
+                        
+                        # Özet metrikler
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Yeni Ürün Sayısı", len(analiz_df))
+                        with col2:
+                            st.metric("Toplam Sevkiyat", f"{analiz_df['Toplam Sevkiyat'].sum():,.0f}")
+                        with col3:
+                            ortalama_artis = analiz_df['Artış'].mean()
+                            st.metric("Ortalama Mağaza Artışı", f"{ortalama_artis:.0f}")
+                        with col4:
+                            toplam_magaza = analiz_df['Sevkiyat Yapılan Mağaza'].sum()
+                            st.metric("Toplam Dağıtım Noktası", toplam_magaza)
+                        
+                        st.markdown("---")
+                        
+                        # Detaylı tablo
+                        st.write("**Ürün Bazında Dağılım Detayı:**")
+                        st.dataframe(analiz_df, use_container_width=True, height=400)
+                        
+                        st.markdown("---")
+                        
+                        # Örnekler
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("**En Çok Dağıtılan 5 Ürün:**")
+                            top_dagilim = analiz_df.nlargest(5, 'Artış')[['Ürün Adı', 'Önceki Mağaza', 'Sevkiyat Yapılan Mağaza', 'Artış']]
+                            st.dataframe(top_dagilim, use_container_width=True)
+                        
+                        with col2:
+                            st.write("**En Fazla Sevkiyat Yapılan 5 Ürün:**")
+                            top_sevkiyat = analiz_df.nlargest(5, 'Toplam Sevkiyat')[['Ürün Adı', 'Toplam Sevkiyat', 'Kalan Depo']]
+                            st.dataframe(top_sevkiyat, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # İndir
+                        st.download_button(
+                            label="📥 Yeni Ürün Dağılım Raporu İndir (CSV)",
+                            data=analiz_df.to_csv(index=False, encoding='utf-8-sig'),
+                            file_name="yeni_urun_dagilim_raporu.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.info("ℹ️ Initial sevkiyatı yapılan ürün bulunamadı.")
+                else:
+                    st.info("ℹ️ Henüz yeni ürünler için sevkiyat yapılmamış.")
+                    st.write("Lütfen 'Sevkiyat Hesaplama' menüsünden hesaplama yapın.")
