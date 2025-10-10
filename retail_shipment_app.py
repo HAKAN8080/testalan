@@ -99,108 +99,104 @@ elif menu == "📤 Veri Yükleme":
     st.title("📤 Veri Yükleme")
     st.markdown("---")
     
-    # Tüm örnek CSV'leri indirme butonu
-    st.subheader("📥 Örnek CSV'leri İndir")
-    
-    # Örnek CSV'ler oluştur
-    example_csvs = {
-        'urun_master.csv': pd.DataFrame({
-            'urun_kod': ['U001', 'U002', 'U003'],
-            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün C'],
-            'satici_kod': ['S001', 'S002', 'S001'],
-            'satici_ad': ['Satıcı 1', 'Satıcı 2', 'Satıcı 1'],
-            'kategori_kod': ['K001', 'K002', 'K001'],
-            'kategori_ad': ['Kategori 1', 'Kategori 2', 'Kategori 1'],
-            'umg': ['UMG1', 'UMG2', 'UMG1'],
-            'umg_ad': ['Üst Mal Grubu 1', 'Üst Mal Grubu 2', 'Üst Mal Grubu 1'],
-            'mg': ['MG1', 'MG2', 'MG1'],
-            'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 1'],
-            'marka_kod': ['M001', 'M002', 'M001'],
-            'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
-            'nitelik': ['Nitelik 1', 'Nitelik 2', 'Nitelik 1'],
-            'durum': ['Aktif', 'Aktif', 'Pasif'],
-            'ithal': [1, 0, 1],
-            'ithal_ad': ['İthal', 'Yerli', 'İthal'],
-            'tanim': ['Tanım 1', 'Tanım 2', 'Tanım 3']
-        }),
-        'magaza_master.csv': pd.DataFrame({
-            'magaza_kod': ['M001', 'M002', 'M003'],
-            'magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
-            'il': ['İstanbul', 'Ankara', 'İzmir'],
-            'bolge': ['Marmara', 'İç Anadolu', 'Ege'],
-            'tip': ['Hipermarket', 'Süpermarket', 'Hipermarket'],
-            'adres_kod': ['ADR001', 'ADR002', 'ADR003'],
-            'sm': [5000, 3000, 4500],
-            'bs': ['BS1', 'BS2', 'BS1'],
-            'depo_kod': ['D001', 'D001', 'D002']
-        }),
-        'yasak.csv': pd.DataFrame({
-            'urun_kod': ['U001', 'U002'],
-            'urun_ad': ['Ürün A', 'Ürün B'],
-            'magaza_kod': ['M002', 'M001'],
-            'magaza_ad': ['Mağaza B', 'Mağaza A'],
-            'yasak_durum': ['Yasak', 'Yasak']
-        }),
-        'depo_stok.csv': pd.DataFrame({
-            'depo_kod': ['D001', 'D001', 'D002'],
-            'depo_ad': ['Depo Merkez', 'Depo Merkez', 'Depo Bölge'],
-            'urun_kod': ['U001', 'U002', 'U001'],
-            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
-            'stok': [1000, 1500, 800]
-        }),
-        'anlik_stok_satis.csv': pd.DataFrame({
-            'magaza_kod': ['M001', 'M001', 'M002'],
-            'magaza_ad': ['Mağaza A', 'Mağaza A', 'Mağaza B'],
-            'urun_kod': ['U001', 'U002', 'U001'],
-            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
-            'klasman_kod': ['K1', 'K2', 'K1'],
-            'klasman_ad': ['Klasman A', 'Klasman B', 'Klasman A'],
-            'marka_kod': ['M001', 'M002', 'M001'],
-            'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
-            'stok': [100, 150, 120],
-            'yol': [20, 30, 25],
-            'satis': [50, 40, 45],
-            'ciro': [5000, 6000, 5500],
-            'smm': [2.0, 3.75, 2.67]
-        }),
-        'haftalik_trend.csv': pd.DataFrame({
-            'klasman_kod': ['K1', 'K1', 'K2'],
-            'klasman_ad': ['Klasman A', 'Klasman A', 'Klasman B'],
-            'marka_kod': ['M001', 'M001', 'M002'],
-            'marka_ad': ['Marka A', 'Marka A', 'Marka B'],
-            'yil': [2025, 2025, 2025],
-            'hafta': [40, 41, 40],
-            'stok': [10000, 9500, 15000],
-            'satis': [2000, 2100, 1800],
-            'ciro': [200000, 210000, 270000],
-            'smm': [5.0, 4.52, 8.33],
-            'iftutar': [1000000, 950000, 1500000]
-        }),
-        'kpi.csv': pd.DataFrame({
-            'mg_id': ['MG1', 'MG2', 'MG3'],
-            'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 3'],
-            'min_deger': [0, 100, 500],
-            'max_deger': [99, 499, 999],
-            'forward_cover': [1.5, 2.0, 2.5]
-        })
-    }
-    
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("📥 Tüm Örnek CSV'leri İndir"):
-            st.success("✅ Örnek CSV'ler hazırlandı! Aşağıdan tek tek indirebilirsiniz.")
-    
-    # Her CSV için ayrı indirme butonu
-    cols = st.columns(4)
-    for idx, (filename, df) in enumerate(example_csvs.items()):
-        with cols[idx % 4]:
-            st.download_button(
-                label=f"📥 {filename}",
-                data=df.to_csv(index=False, encoding='utf-8-sig'),
-                file_name=filename,
-                mime="text/csv",
-                key=f"download_{filename}"
-            )
+    # Tüm örnek CSV'leri indirme butonu - Gizlenebilir
+    with st.expander("📥 Örnek CSV'leri İndir", expanded=False):
+        st.info("Tüm örnek CSV dosyalarını aşağıdan indirebilirsiniz.")
+        
+        # Örnek CSV'ler oluştur
+        example_csvs = {
+            'urun_master.csv': pd.DataFrame({
+                'urun_kod': ['U001', 'U002', 'U003'],
+                'urun_ad': ['Ürün A', 'Ürün B', 'Ürün C'],
+                'satici_kod': ['S001', 'S002', 'S001'],
+                'satici_ad': ['Satıcı 1', 'Satıcı 2', 'Satıcı 1'],
+                'kategori_kod': ['K001', 'K002', 'K001'],
+                'kategori_ad': ['Kategori 1', 'Kategori 2', 'Kategori 1'],
+                'umg': ['UMG1', 'UMG2', 'UMG1'],
+                'umg_ad': ['Üst Mal Grubu 1', 'Üst Mal Grubu 2', 'Üst Mal Grubu 1'],
+                'mg': ['MG1', 'MG2', 'MG1'],
+                'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 1'],
+                'marka_kod': ['M001', 'M002', 'M001'],
+                'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
+                'nitelik': ['Nitelik 1', 'Nitelik 2', 'Nitelik 1'],
+                'durum': ['Aktif', 'Aktif', 'Pasif'],
+                'ithal': [1, 0, 1],
+                'ithal_ad': ['İthal', 'Yerli', 'İthal'],
+                'tanim': ['Tanım 1', 'Tanım 2', 'Tanım 3']
+            }),
+            'magaza_master.csv': pd.DataFrame({
+                'magaza_kod': ['M001', 'M002', 'M003'],
+                'magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+                'il': ['İstanbul', 'Ankara', 'İzmir'],
+                'bolge': ['Marmara', 'İç Anadolu', 'Ege'],
+                'tip': ['Hipermarket', 'Süpermarket', 'Hipermarket'],
+                'adres_kod': ['ADR001', 'ADR002', 'ADR003'],
+                'sm': [5000, 3000, 4500],
+                'bs': ['BS1', 'BS2', 'BS1'],
+                'depo_kod': ['D001', 'D001', 'D002']
+            }),
+            'yasak.csv': pd.DataFrame({
+                'urun_kod': ['U001', 'U002'],
+                'urun_ad': ['Ürün A', 'Ürün B'],
+                'magaza_kod': ['M002', 'M001'],
+                'magaza_ad': ['Mağaza B', 'Mağaza A'],
+                'yasak_durum': ['Yasak', 'Yasak']
+            }),
+            'depo_stok.csv': pd.DataFrame({
+                'depo_kod': ['D001', 'D001', 'D002'],
+                'depo_ad': ['Depo Merkez', 'Depo Merkez', 'Depo Bölge'],
+                'urun_kod': ['U001', 'U002', 'U001'],
+                'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
+                'stok': [1000, 1500, 800]
+            }),
+            'anlik_stok_satis.csv': pd.DataFrame({
+                'magaza_kod': ['M001', 'M001', 'M002'],
+                'magaza_ad': ['Mağaza A', 'Mağaza A', 'Mağaza B'],
+                'urun_kod': ['U001', 'U002', 'U001'],
+                'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
+                'klasman_kod': ['K1', 'K2', 'K1'],
+                'klasman_ad': ['Klasman A', 'Klasman B', 'Klasman A'],
+                'marka_kod': ['M001', 'M002', 'M001'],
+                'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
+                'stok': [100, 150, 120],
+                'yol': [20, 30, 25],
+                'satis': [50, 40, 45],
+                'ciro': [5000, 6000, 5500],
+                'smm': [2.0, 3.75, 2.67]
+            }),
+            'haftalik_trend.csv': pd.DataFrame({
+                'klasman_kod': ['K1', 'K1', 'K2'],
+                'klasman_ad': ['Klasman A', 'Klasman A', 'Klasman B'],
+                'marka_kod': ['M001', 'M001', 'M002'],
+                'marka_ad': ['Marka A', 'Marka A', 'Marka B'],
+                'yil': [2025, 2025, 2025],
+                'hafta': [40, 41, 40],
+                'stok': [10000, 9500, 15000],
+                'satis': [2000, 2100, 1800],
+                'ciro': [200000, 210000, 270000],
+                'smm': [5.0, 4.52, 8.33],
+                'iftutar': [1000000, 950000, 1500000]
+            }),
+            'kpi.csv': pd.DataFrame({
+                'mg_id': ['MG1', 'MG2', 'MG3'],
+                'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 3'],
+                'min_deger': [0, 100, 500],
+                'max_deger': [99, 499, 999],
+                'forward_cover': [1.5, 2.0, 2.5]
+            })
+        }
+        
+        # Her CSV için ayrı indirme butonu
+        cols = st.columns(4)
+        for idx, (filename, df) in enumerate(example_csvs.items()):
+            with cols[idx % 4]:
+                st.download_button(
+                    label=f"📥 {filename}",
+                    data=df.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name=filename,
+                    mime="text/csv",
+                    key=f"download_{filename}"
+                )
     
     st.markdown("---")
     
