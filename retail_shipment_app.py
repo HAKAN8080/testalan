@@ -930,6 +930,61 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write("⏳ Adım 2/6: Segmentasyon yapılıyor...")
                 progress_bar.progress(30)
                 
+                # Yeni ürün tespiti (otomatik)
+                st.write("🔍 Yeni ürünler tespit ediliyor...")
+                
+                # Yasak kontrolü
+                anlik_df_temiz = anlik_df.copy()
+                if st.session_state.yasak_master is not None:
+                    yasak_df = st.session_state.yasak_master.copy()
+                    yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str)
+                    yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str)
+                    
+                    anlik_df_temiz['urun_kod_str'] = anlik_df_temiz['urun_kod'].astype(str)
+                    anlik_df_temiz['magaza_kod_str'] = anlik_df_temiz['magaza_kod'].astype(str)
+                    
+                    anlik_df_temiz = anlik_df_temiz.merge(
+                        yasak_df[['urun_kod', 'magaza_kod', 'yasak_durum']],
+                        left_on=['urun_kod_str', 'magaza_kod_str'],
+                        right_on=['urun_kod', 'magaza_kod'],
+                        how='left',
+                        suffixes=('', '_yasak')
+                    )
+                    anlik_df_temiz = anlik_df_temiz[anlik_df_temiz['yasak_durum'] != 'Yasak'].copy()
+                
+                # Toplam mağaza (yasak olmayan)
+                toplam_magaza_count = anlik_df_temiz['magaza_kod'].nunique()
+                esik_magaza = int(toplam_magaza_count * 0.30)
+                
+                # Depo stok > 500 olanları bul
+                depo_df_temp = depo_df.copy()
+                depo_df_temp['urun_kod'] = depo_df_temp['urun_kod'].astype(str).apply(
+                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                )
+                depo_toplam = depo_df_temp.groupby('urun_kod')['stok'].sum().reset_index()
+                depo_toplam.columns = ['urun_kod', 'depo_stok_toplam']
+                yeni_urun_adaylari = depo_toplam[depo_toplam['depo_stok_toplam'] > 500]['urun_kod'].tolist()
+                
+                # Bu ürünlerin mağaza dağılımına bak
+                anlik_df_temiz['urun_kod'] = anlik_df_temiz['urun_kod'].astype(str)
+                yeni_urun_df = anlik_df_temiz[anlik_df_temiz['urun_kod'].isin(yeni_urun_adaylari)].copy()
+                yeni_urun_df['toplam_eldeki'] = yeni_urun_df['stok'] + yeni_urun_df['yol']
+                urun_stoklu = yeni_urun_df[yeni_urun_df['toplam_eldeki'] > 1].groupby('urun_kod')['magaza_kod'].nunique().reset_index()
+                urun_stoklu.columns = ['urun_kod', 'stoklu_magaza_sayisi']
+                
+                urun_analiz = urun_stoklu.merge(depo_toplam, on='urun_kod', how='left')
+                yeni_urunler = urun_analiz[
+                    (urun_analiz['stoklu_magaza_sayisi'] < esik_magaza) &
+                    (urun_analiz['depo_stok_toplam'] > 500)
+                ].copy()
+                
+                yeni_urun_kodlari = yeni_urunler['urun_kod'].tolist()
+                
+                # Session state'e kaydet
+                st.session_state.yeni_urun_listesi = yeni_urunler
+                
+                st.write(f"🆕 Tespit edilen yeni ürün: {len(yeni_urun_kodlari)}")
+                
                 # Mağaza ve ürün bazında toplam stok/satış hesapla
                 urun_agg = anlik_df.groupby('urun_kod').agg({
                     'stok': 'sum',
@@ -1078,10 +1133,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 anlik_min = anlik_df.copy()
                 anlik_min['Durum'] = 'Min'
                 
-                # Yeni ürün kontrolü - Initial olarak işaretle
-                if st.session_state.yeni_urun_listesi is not None:
-                    yeni_urun_kodlari = st.session_state.yeni_urun_listesi['urun_kod'].astype(str).tolist()
-                    
+                # Yeni ürünler için Initial satırları oluştur (otomatik tespit edildi)
+                if len(yeni_urun_kodlari) > 0:
                     # Initial satırları oluştur (sadece yeni ürünler için)
                     anlik_initial = anlik_df[anlik_df['urun_kod'].astype(str).isin(yeni_urun_kodlari)].copy()
                     anlik_initial['Durum'] = 'Initial'
@@ -1089,7 +1142,6 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     # Üç dataframe'i birleştir
                     anlik_df = pd.concat([anlik_rpt, anlik_min, anlik_initial], ignore_index=True)
                     
-                    st.write(f"🔍 Debug: Yeni ürün sayısı: {len(yeni_urun_kodlari)}")
                     st.write(f"🔍 Debug: Initial satır sayısı: {len(anlik_initial)}")
                 else:
                     # Sadece RPT ve Min
