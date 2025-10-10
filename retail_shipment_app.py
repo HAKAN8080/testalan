@@ -859,6 +859,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         "Yasak Master": st.session_state.yasak_master
     }    
     
+    
     missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
@@ -1181,8 +1182,21 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 depo_stok_dict = {}
                 
                 # Depo stok bilgisini dictionary'e al - veri tiplerini string'e çevir
+                # ÖNEMLİ: Ürün kodlarındaki .0 sorununu çöz
                 for _, row in depo_df.iterrows():
-                    key = (str(row['depo_kod']), str(row['urun_kod']))
+                    depo_kod_str = str(row['depo_kod'])
+                    urun_kod_raw = str(row['urun_kod'])
+                    
+                    # Float string ise düzelt: '1000036.0' -> '1000036'
+                    try:
+                        if '.' in urun_kod_raw:
+                            urun_kod_str = str(int(float(urun_kod_raw)))
+                        else:
+                            urun_kod_str = urun_kod_raw
+                    except:
+                        urun_kod_str = urun_kod_raw
+                    
+                    key = (depo_kod_str, urun_kod_str)
                     if key not in depo_stok_dict:
                         depo_stok_dict[key] = float(row['stok'])
                 
@@ -1190,13 +1204,19 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 # İlk birkaç depo stok key'ini göster
                 if len(depo_stok_dict) > 0:
-                    sample_keys = list(depo_stok_dict.keys())[:3]
-                    st.write(f"🔍 Debug: Örnek depo key'leri: {sample_keys}")
+                    sample_keys = list(depo_stok_dict.keys())[:5]
+                    st.write(f"🔍 Debug: Örnek depo key'leri (düzeltilmiş): {sample_keys}")
                 
                 # İlk birkaç result_df satırının depo_kod ve urun_kod'unu göster
                 if len(result_df) > 0:
-                    sample_result = result_df[['depo_kod', 'urun_kod']].head(3)
-                    st.write("🔍 Debug: Örnek result_df depo-ürün:")
+                    # Result_df'deki ürün kodlarını da düzelt
+                    result_df['urun_kod_clean'] = result_df['urun_kod'].astype(str).apply(
+                        lambda x: str(int(float(x))) if ('.' in str(x)) else str(x)
+                    )
+                    result_df['depo_kod_clean'] = result_df['depo_kod'].astype(str)
+                    
+                    sample_result = result_df[['depo_kod_clean', 'urun_kod', 'urun_kod_clean']].head(5)
+                    st.write("🔍 Debug: Örnek result_df depo-ürün (düzeltilmiş):")
                     st.write(sample_result)
                 
                 # Her satır için depo stoğuna göre sevkiyat miktarını ayarla
@@ -1205,7 +1225,17 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 for idx, row in result_df.iterrows():
                     depo_kod = str(row['depo_kod'])
-                    urun_kod = str(row['urun_kod'])
+                    urun_kod_raw = str(row['urun_kod'])
+                    
+                    # Float string ise düzelt
+                    try:
+                        if '.' in urun_kod_raw:
+                            urun_kod = str(int(float(urun_kod_raw)))
+                        else:
+                            urun_kod = urun_kod_raw
+                    except:
+                        urun_kod = urun_kod_raw
+                    
                     ihtiyac = float(row['ihtiyac'])
                     
                     key = (depo_kod, urun_kod)
