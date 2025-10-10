@@ -756,11 +756,25 @@ elif menu == "📊 Sıralama":
         if st.session_state.siralama_data is not None:
             siralama_df = st.session_state.siralama_data
         else:
+            # Segmentleri doğru sıraya koy
+            def sort_segments(segments):
+                """Segmentleri sayısal değere göre sırala"""
+                def get_sort_key(seg):
+                    # "0-4" gibi string'den ilk sayıyı al
+                    try:
+                        return int(seg.split('-')[0])
+                    except:
+                        return 999  # inf veya parse edilemeyenler sona
+                return sorted(segments, key=get_sort_key)
+            
+            sorted_store_segments = sort_segments(store_segments)
+            sorted_prod_segments = sort_segments(prod_segments)
+            
             # Tüm kombinasyonları oluştur - Her kombinasyon için RPT ve Min
             siralama_rows = []
             oncelik_counter = 1
-            for store_seg in store_segments:
-                for prod_seg in prod_segments:
+            for store_seg in sorted_store_segments:
+                for prod_seg in sorted_prod_segments:
                     # RPT
                     siralama_rows.append({
                         'Magaza_Cluster': store_seg,
@@ -855,9 +869,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
