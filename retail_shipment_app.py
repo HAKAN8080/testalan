@@ -857,9 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -1105,6 +1103,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     anlik_df.loc[anlik_df['yasak_durum'] == 'Yasak', 'ihtiyac'] = 0
                 
                 # Depo eşleşmesi
+                magaza_df['magaza_kod'] = magaza_df['magaza_kod'].astype(str)
+                anlik_df['magaza_kod'] = anlik_df['magaza_kod'].astype(str)
+                
                 anlik_df = anlik_df.merge(
                     magaza_df[['magaza_kod', 'depo_kod']],
                     on='magaza_kod',
