@@ -943,17 +943,21 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 product_ranges = st.session_state.segmentation_params['product_ranges']
                 store_ranges = st.session_state.segmentation_params['store_ranges']
                 
+                # Segment etiketlerini string olarak oluştur
+                product_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in product_ranges]
+                store_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in store_ranges]
+                
                 urun_agg['segment'] = pd.cut(
                     urun_agg['cover'],
                     bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
-                    labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
+                    labels=product_labels,
                     include_lowest=True
                 )
                 
                 magaza_agg['segment'] = pd.cut(
                     magaza_agg['cover'],
                     bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
-                    labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
+                    labels=store_labels,
                     include_lowest=True
                 )
                 
@@ -1075,6 +1079,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     'Durum': 'durum',
                     'ihtiyac': 'sevkiyat_miktari'
                 })
+                
+                # Sıra numarası ekle
+                result_final.insert(0, 'sira_no', range(1, len(result_final) + 1))
                 
                 progress_bar.progress(100)
                 
