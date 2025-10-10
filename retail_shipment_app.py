@@ -1151,23 +1151,39 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 result_df = anlik_df[anlik_df['ihtiyac'] > 0].copy()
                 result_df = result_df.sort_values('Oncelik').reset_index(drop=True)
                 
+                st.write(f"🔍 Debug: Öncelik sıralaması sonrası kayıt: {len(result_df)}")
+                
                 # Depo stok kontrolü - öncelik sırasına göre
                 # Her ürün-depo kombinasyonu için kalan stok takibi
                 depo_stok_dict = {}
                 
-                # Depo stok bilgisini dictionary'e al
+                # Depo stok bilgisini dictionary'e al - veri tiplerini string'e çevir
                 for _, row in depo_df.iterrows():
-                    key = (row['depo_kod'], row['urun_kod'])
+                    key = (str(row['depo_kod']), str(row['urun_kod']))
                     if key not in depo_stok_dict:
-                        depo_stok_dict[key] = row['stok']
+                        depo_stok_dict[key] = float(row['stok'])
+                
+                st.write(f"🔍 Debug: Depo stok dictionary boyutu: {len(depo_stok_dict)}")
+                
+                # İlk birkaç depo stok key'ini göster
+                if len(depo_stok_dict) > 0:
+                    sample_keys = list(depo_stok_dict.keys())[:3]
+                    st.write(f"🔍 Debug: Örnek depo key'leri: {sample_keys}")
+                
+                # İlk birkaç result_df satırının depo_kod ve urun_kod'unu göster
+                if len(result_df) > 0:
+                    sample_result = result_df[['depo_kod', 'urun_kod']].head(3)
+                    st.write("🔍 Debug: Örnek result_df depo-ürün:")
+                    st.write(sample_result)
                 
                 # Her satır için depo stoğuna göre sevkiyat miktarını ayarla
                 sevkiyat_gercek = []
+                eslesme_sayisi = 0
                 
                 for idx, row in result_df.iterrows():
-                    depo_kod = row['depo_kod']
-                    urun_kod = row['urun_kod']
-                    ihtiyac = row['ihtiyac']
+                    depo_kod = str(row['depo_kod'])
+                    urun_kod = str(row['urun_kod'])
+                    ihtiyac = float(row['ihtiyac'])
                     
                     key = (depo_kod, urun_kod)
                     
@@ -1192,6 +1208,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 # Sadece gerçek sevkiyatı > 0 olanları al
                 result_df = result_df[result_df['sevkiyat_gercek'] > 0].copy()
+                
+                st.write(f"🔍 Debug: Depo stok kontrolü sonrası kayıt: {len(result_df)}")
                 
                 # Sonuç tablosunu oluştur
                 result_final = result_df[[
