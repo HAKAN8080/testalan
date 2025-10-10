@@ -857,9 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -1089,6 +1087,13 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Yasak kontrolü
                 if st.session_state.yasak_master is not None:
                     yasak_df = st.session_state.yasak_master.copy()
+                    
+                    # Veri tiplerini uyumlu hale getir
+                    yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str)
+                    yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str)
+                    anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
+                    anlik_df['magaza_kod'] = anlik_df['magaza_kod'].astype(str)
+                    
                     anlik_df = anlik_df.merge(
                         yasak_df[['urun_kod', 'magaza_kod', 'yasak_durum']],
                         on=['urun_kod', 'magaza_kod'],
