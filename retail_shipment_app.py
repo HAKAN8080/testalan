@@ -859,6 +859,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         "Yasak Master": st.session_state.yasak_master
     }    
     
+    
     missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
@@ -990,16 +991,28 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
                     anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
                     
+                    st.write(f"🔍 Debug: Ürün master kayıt sayısı: {len(urun_master)}")
+                    st.write(f"🔍 Debug: Ürün master örnek mg: {urun_master['mg'].head(3).tolist()}")
+                    
                     anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
+                    
+                    st.write(f"🔍 Debug: Merge sonrası mg null sayısı: {anlik_df['mg'].isna().sum()}")
                     
                     # KPI ile birleştir - min_deger için
                     kpi_data = kpi_df[['mg_id', 'min_deger', 'max_deger']].rename(columns={'mg_id': 'mg'})
+                    
+                    st.write(f"🔍 Debug: KPI kayıt sayısı: {len(kpi_data)}")
+                    st.write(f"🔍 Debug: KPI mg değerleri: {kpi_data['mg'].tolist()}")
+                    st.write(f"🔍 Debug: KPI min_deger değerleri: {kpi_data['min_deger'].tolist()}")
                     
                     # mg veri tiplerini uyumlu hale getir
                     kpi_data['mg'] = kpi_data['mg'].astype(str)
                     anlik_df['mg'] = anlik_df['mg'].astype(str)
                     
                     anlik_df = anlik_df.merge(kpi_data, on='mg', how='left')
+                    
+                    st.write(f"🔍 Debug: KPI merge sonrası min_deger null sayısı: {anlik_df['min_deger'].isna().sum()}")
+                    st.write(f"🔍 Debug: KPI merge sonrası min_deger > 0 sayısı: {(anlik_df['min_deger'] > 0).sum()}")
                     
                     # min_deger yoksa default 0
                     anlik_df['min_deger'] = anlik_df['min_deger'].fillna(0)
