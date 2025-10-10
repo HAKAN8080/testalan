@@ -778,15 +778,20 @@ elif menu == "📊 Sıralama":
         # Sıralama tablosu oluştur
         st.subheader("🎯 Öncelik Sıralaması")
         
+        st.info("""
+        **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
+        **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
+        """)
+        
         # Tüm kombinasyonlar için satırlar oluştur
         siralama_rows = []
         for store_seg in store_segments:
             for prod_seg in prod_segments:
                 siralama_rows.append({
-                    'Mağaza_Cluster': store_seg,
-                    'Ürün_Cluster': prod_seg,
-                    'RPT/Min': 'RPT',  # Default değer
-                    'Sıralama': 1  # Default öncelik
+                    'Magaza_Cluster': store_seg,
+                    'Urun_Cluster': prod_seg,
+                    'Durum': 'RPT',  # Default değer
+                    'Oncelik': 1  # Default öncelik
                 })
         
         # Eğer daha önce kaydedilmişse onu kullan
@@ -801,24 +806,24 @@ elif menu == "📊 Sıralama":
             use_container_width=True,
             num_rows="dynamic",
             column_config={
-                "Mağaza_Cluster": st.column_config.TextColumn(
+                "Magaza_Cluster": st.column_config.TextColumn(
                     "Mağaza Cluster",
                     help="Mağaza segmenti",
                     disabled=False
                 ),
-                "Ürün_Cluster": st.column_config.TextColumn(
+                "Urun_Cluster": st.column_config.TextColumn(
                     "Ürün Cluster",
                     help="Ürün segmenti",
                     disabled=False
                 ),
-                "RPT/Min": st.column_config.SelectboxColumn(
-                    "RPT/Min",
-                    help="Sıralama türü seçin",
+                "Durum": st.column_config.SelectboxColumn(
+                    "Durum",
+                    help="RPT (Hızlı sevkiyat) veya Min (Minimum stok) seçin",
                     options=["RPT", "Min"],
                     required=True
                 ),
-                "Sıralama": st.column_config.NumberColumn(
-                    "Öncelik Sırası",
+                "Oncelik": st.column_config.NumberColumn(
+                    "Öncelik",
                     help="Öncelik sırası (1 = en yüksek öncelik)",
                     min_value=1,
                     max_value=100,
@@ -834,8 +839,25 @@ elif menu == "📊 Sıralama":
         st.subheader("📋 Sıralama Önizleme")
         
         # Sıralamaya göre önizleme
-        preview_df = edited_siralama.sort_values('Sıralama')
-        st.dataframe(preview_df, use_container_width=True, height=400)
+        preview_df = edited_siralama.sort_values('Oncelik')
+        
+        # RPT ve Min ayrı ayrı göster
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**RPT Öncelikleri**")
+            rpt_df = preview_df[preview_df['Durum'] == 'RPT'].copy()
+            if len(rpt_df) > 0:
+                st.dataframe(rpt_df, use_container_width=True, height=300)
+            else:
+                st.info("RPT önceliği yok")
+        
+        with col2:
+            st.write("**Min Öncelikleri**")
+            min_df = preview_df[preview_df['Durum'] == 'Min'].copy()
+            if len(min_df) > 0:
+                st.dataframe(min_df, use_container_width=True, height=300)
+            else:
+                st.info("Min önceliği yok")
         
         # Kaydet
         col1, col2 = st.columns([1, 4])
@@ -871,9 +893,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
