@@ -762,7 +762,7 @@ elif menu == "📊 Sıralama":
             sorted_store_segments = sort_segments(store_segments)
             sorted_prod_segments = sort_segments(prod_segments)
             
-            # Tüm kombinasyonları oluştur - Her kombinasyon için RPT ve Min
+            # Tüm kombinasyonları oluştur - Her kombinasyon için RPT, Initial ve Min
             siralama_rows = []
             oncelik_counter = 1
             for store_seg in sorted_store_segments:
@@ -772,6 +772,15 @@ elif menu == "📊 Sıralama":
                         'Magaza_Cluster': store_seg,
                         'Urun_Cluster': prod_seg,
                         'Durum': 'RPT',
+                        'Oncelik': oncelik_counter
+                    })
+                    oncelik_counter += 1
+                    
+                    # Initial
+                    siralama_rows.append({
+                        'Magaza_Cluster': store_seg,
+                        'Urun_Cluster': prod_seg,
+                        'Durum': 'Initial',
                         'Oncelik': oncelik_counter
                     })
                     oncelik_counter += 1
@@ -1259,7 +1268,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Önceliğe göre sırala ve sadece ihtiyacı olanları al
                 result_df = anlik_df[anlik_df['ihtiyac'] > 0].copy()
                 
-                # ÖNEMLI: Aynı mağaza-ürün için birden fazla durum varsa (RPT, Min, Initial)
+                # ÖNEMLI: Aynı mağaza-ürün için birden fazla durum varsa (RPT, Initial, Min)
+                # Sıralama önceliği: RPT > Initial > Min
                 # Maksimum ihtiyacı olanı al
                 result_df_max = result_df.loc[
                     result_df.groupby(['magaza_kod', 'urun_kod'])['ihtiyac'].idxmax()
@@ -1267,6 +1277,12 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 st.write(f"🔍 Debug: Tüm ihtiyaç kayıtları: {len(result_df)}")
                 st.write(f"🔍 Debug: Maksimum alındıktan sonra: {len(result_df_max)}")
+                st.write(f"🔍 Debug: RPT sayısı: {(result_df_max['Durum'] == 'RPT').sum()}")
+                st.write(f"🔍 Debug: Initial sayısı: {(result_df_max['Durum'] == 'Initial').sum()}")
+                st.write(f"🔍 Debug: Min sayısı: {(result_df_max['Durum'] == 'Min').sum()}")
+                
+                # Önceliğe göre sırala
+                result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)Debug: Maksimum alındıktan sonra: {len(result_df_max)}")
                 st.write(f"🔍 Debug: RPT sayısı: {(result_df_max['Durum'] == 'RPT').sum()}")
                 st.write(f"🔍 Debug: Min sayısı: {(result_df_max['Durum'] == 'Min').sum()}")
                 st.write(f"🔍 Debug: Initial sayısı: {(result_df_max['Durum'] == 'Initial').sum()}")
