@@ -859,7 +859,6 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         "Yasak Master": st.session_state.yasak_master
     }    
     
-    
     missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
@@ -1275,9 +1274,12 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 ]].rename(columns={
                     'Oncelik': 'oncelik',
                     'Durum': 'durum',
-                    'ihtiyac': 'ihtiyac_hesaplanan',
+                    'ihtiyac': 'ihtiyac_miktari',
                     'sevkiyat_gercek': 'sevkiyat_miktari'
                 })
+                
+                # Stok yokluğu kaynaklı satış kaybını hesapla
+                result_final['stok_yoklugu_satis_kaybi'] = result_final['ihtiyac_miktari'] - result_final['sevkiyat_miktari']
                 
                 # Sıra numarası ekle
                 result_final.insert(0, 'sira_no', range(1, len(result_final) + 1))
@@ -1291,15 +1293,51 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.markdown("---")
                 st.subheader("📊 Sevkiyat Sonuçları")
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Toplam Sevkiyat Satırı", len(result_final))
                 with col2:
-                    st.metric("Toplam Sevkiyat Miktarı", f"{result_final['sevkiyat_miktari'].sum():,.0f}")
+                    st.metric("Toplam İhtiyaç", f"{result_final['ihtiyac_miktari'].sum():,.0f}")
                 with col3:
-                    st.metric("Etkilenen Mağaza", result_final['magaza_kod'].nunique())
+                    st.metric("Gerçekleşen Sevkiyat", f"{result_final['sevkiyat_miktari'].sum():,.0f}")
+                with col4:
+                    st.metric("Stok Yokluğu Satış Kaybı", f"{result_final['stok_yoklugu_satis_kaybi'].sum():,.0f}")
                 
                 st.dataframe(result_final, use_container_width=True, height=400)
+                
+                # Stok yokluğu özet raporu
+                st.markdown("---")
+                st.subheader("⚠️ Stok Yokluğu Kaynaklı Satış Kaybı Raporu")
+                
+                # Sadece stok yokluğu olanları göster
+                stok_yoklugu_df = result_final[result_final['stok_yoklugu_satis_kaybi'] > 0].copy()
+                
+                if len(stok_yoklugu_df) > 0:
+                    st.warning(f"⚠️ {len(stok_yoklugu_df)} satırda stok yokluğu nedeniyle satış kaybı var!")
+                    
+                    # Özet tablo
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**En Fazla Kayıp Olan 10 Satır:**")
+                        top_kayip = stok_yoklugu_df.nlargest(10, 'stok_yoklugu_satis_kaybi')[[
+                            'magaza_ad', 'urun_ad', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi'
+                        ]]
+                        st.dataframe(top_kayip, use_container_width=True)
+                    
+                    with col2:
+                        st.write("**Ürün Bazında Toplam Kayıp:**")
+                        urun_kayip = stok_yoklugu_df.groupby('urun_ad')['stok_yoklugu_satis_kaybi'].sum().sort_values(ascending=False).head(10)
+                        st.dataframe(urun_kayip, use_container_width=True)
+                    
+                    # Detaylı raporu indir
+                    st.download_button(
+                        label="📥 Stok Yokluğu Raporu İndir (CSV)",
+                        data=stok_yoklugu_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="stok_yoklugu_satis_kaybi.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.success("✅ Tüm ihtiyaçlar depo stoğundan karşılanabildi!")
                 
                 # Export butonları
                 st.markdown("---")
