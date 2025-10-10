@@ -857,9 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -965,14 +963,18 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 anlik_df = anlik_df.merge(
                     urun_agg[['urun_kod', 'segment']], 
                     on='urun_kod', 
-                    suffixes=('', '_urun')
+                    how='left'
                 ).rename(columns={'segment': 'urun_segment'})
                 
                 anlik_df = anlik_df.merge(
                     magaza_agg[['magaza_kod', 'segment']], 
                     on='magaza_kod', 
-                    suffixes=('', '_magaza')
+                    how='left'
                 ).rename(columns={'segment': 'magaza_segment'})
+                
+                # Segment değerlerini string'e çevir
+                anlik_df['urun_segment'] = anlik_df['urun_segment'].astype(str)
+                anlik_df['magaza_segment'] = anlik_df['magaza_segment'].astype(str)
                 
                 # KPI'dan forward_cover al (mg bazında)
                 # Basitleştirme: Ortalama forward_cover kullan
@@ -1041,6 +1043,29 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Negatif ihtiyaçları 0 yap (min için: <=0 ise 0)
                 anlik_df['ihtiyac'] = anlik_df['ihtiyac'].clip(lower=0)
                 
+                # KPI'dan max_deger kontrolü - ürünün mg'sine göre
+                # Basitleştirme: Eğer KPI'da varsa kontrol et
+                # Ürün master'dan mg bilgisi al
+                if st.session_state.urun_master is not None:
+                    urun_master = st.session_state.urun_master[['urun_kod', 'mg']].copy()
+                    anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
+                    
+                    # KPI ile birleştir
+                    kpi_max = kpi_df[['mg_id', 'max_deger']].rename(columns={'mg_id': 'mg'})
+                    anlik_df = anlik_df.merge(kpi_max, on='mg', how='left')
+                    
+                    # max_deger varsa, sevkiyat + stok + yol toplamı max_deger'i geçemesin
+                    anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
+                    anlik_df['max_sevkiyat'] = anlik_df['max_sevkiyat'].clip(lower=0)
+                    
+                    # İhtiyacı max_sevkiyat ile sınırla
+                    anlik_df['ihtiyac'] = anlik_df.apply(
+                        lambda row: min(row['ihtiyac'], row['max_sevkiyat']) if pd.notna(row['max_sevkiyat']) else row['ihtiyac'],
+                        axis=1
+                    )
+                else:
+                    st.warning("⚠️ Ürün Master yüklenmediği için max_deger kontrolü yapılamadı")
+                
                 st.write("⏳ Adım 5/6: Yasak kontrolleri yapılıyor...")
                 progress_bar.progress(75)
                 
@@ -1062,22 +1087,65 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     how='left'
                 )
                 
-                st.write("⏳ Adım 6/6: Öncelik sıralaması uygulanıyor ve sonuçlar hazırlanıyor...")
+                st.write("⏳ Adım 6/6: Öncelik sıralaması uygulanıyor ve depo stok kontrolü yapılıyor...")
                 progress_bar.progress(90)
                 
                 # Önceliğe göre sırala ve sadece ihtiyacı olanları al
                 result_df = anlik_df[anlik_df['ihtiyac'] > 0].copy()
                 result_df = result_df.sort_values('Oncelik').reset_index(drop=True)
                 
+                # Depo stok kontrolü - öncelik sırasına göre
+                # Her ürün-depo kombinasyonu için kalan stok takibi
+                depo_stok_dict = {}
+                
+                # Depo stok bilgisini dictionary'e al
+                for _, row in depo_df.iterrows():
+                    key = (row['depo_kod'], row['urun_kod'])
+                    if key not in depo_stok_dict:
+                        depo_stok_dict[key] = row['stok']
+                
+                # Her satır için depo stoğuna göre sevkiyat miktarını ayarla
+                sevkiyat_gercek = []
+                
+                for idx, row in result_df.iterrows():
+                    depo_kod = row['depo_kod']
+                    urun_kod = row['urun_kod']
+                    ihtiyac = row['ihtiyac']
+                    
+                    key = (depo_kod, urun_kod)
+                    
+                    # Depo stoğu var mı kontrol et
+                    if key in depo_stok_dict:
+                        kalan_stok = depo_stok_dict[key]
+                        
+                        # İhtiyaç kadar verilebilirse ver, yoksa kalanı ver
+                        if kalan_stok >= ihtiyac:
+                            sevkiyat = ihtiyac
+                            depo_stok_dict[key] -= ihtiyac
+                        else:
+                            sevkiyat = kalan_stok
+                            depo_stok_dict[key] = 0
+                    else:
+                        # Depoda bu ürün yok
+                        sevkiyat = 0
+                    
+                    sevkiyat_gercek.append(sevkiyat)
+                
+                result_df['sevkiyat_gercek'] = sevkiyat_gercek
+                
+                # Sadece gerçek sevkiyatı > 0 olanları al
+                result_df = result_df[result_df['sevkiyat_gercek'] > 0].copy()
+                
                 # Sonuç tablosunu oluştur
                 result_final = result_df[[
                     'Oncelik', 'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad',
                     'magaza_segment', 'urun_segment', 'Durum',
-                    'stok', 'yol', 'satis', 'ihtiyac', 'depo_kod'
+                    'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_gercek', 'depo_kod'
                 ]].rename(columns={
                     'Oncelik': 'oncelik',
                     'Durum': 'durum',
-                    'ihtiyac': 'sevkiyat_miktari'
+                    'ihtiyac': 'ihtiyac_hesaplanan',
+                    'sevkiyat_gercek': 'sevkiyat_miktari'
                 })
                 
                 # Sıra numarası ekle
