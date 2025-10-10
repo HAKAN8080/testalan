@@ -227,22 +227,17 @@ elif menu == "📤 Veri Yükleme":
                 if all(col in df.columns for col in required_cols):
                     st.session_state.urun_master = df
                     st.success(f"✅ {len(df)} ürün yüklendi!")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.urun_master is not None:
-            edited_df = st.data_editor(
-                st.session_state.urun_master,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_urun"):
-                st.session_state.urun_master = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.urun_master is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.urun_master.head(10), use_container_width=True, height=300)
     
     # 2. MAĞAZA MASTER
     with tab2:
@@ -259,22 +254,17 @@ elif menu == "📤 Veri Yükleme":
                 if all(col in df.columns for col in required_cols):
                     st.session_state.magaza_master = df
                     st.success(f"✅ {len(df)} mağaza yüklendi!")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.magaza_master is not None:
-            edited_df = st.data_editor(
-                st.session_state.magaza_master,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_magaza"):
-                st.session_state.magaza_master = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.magaza_master is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.magaza_master.head(10), use_container_width=True, height=300)
     
     # 3. YASAK
     with tab3:
@@ -291,22 +281,17 @@ elif menu == "📤 Veri Yükleme":
                 if all(col in df.columns for col in required_cols):
                     st.session_state.yasak_master = df
                     st.success(f"✅ {len(df)} yasak kaydı yüklendi!")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.yasak_master is not None:
-            edited_df = st.data_editor(
-                st.session_state.yasak_master,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_yasak"):
-                st.session_state.yasak_master = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.yasak_master is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.yasak_master.head(10), use_container_width=True, height=300)
     
     # 4. DEPO STOK
     with tab4:
@@ -323,22 +308,17 @@ elif menu == "📤 Veri Yükleme":
                 if all(col in df.columns for col in required_cols):
                     st.session_state.depo_stok = df
                     st.success(f"✅ {len(df)} depo stok kaydı yüklendi!")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.depo_stok is not None:
-            edited_df = st.data_editor(
-                st.session_state.depo_stok,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_depo"):
-                st.session_state.depo_stok = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.depo_stok is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.depo_stok.head(10), use_container_width=True, height=300)
     
     # 5. ANLIK STOK SATIŞ
     with tab5:
@@ -365,22 +345,17 @@ elif menu == "📤 Veri Yükleme":
                         st.metric("Toplam Ürün", df['urun_kod'].nunique())
                     with col3:
                         st.metric("Ortalama SMM", f"{df['smm'].mean():.2f}")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.anlik_stok_satis is not None:
-            edited_df = st.data_editor(
-                st.session_state.anlik_stok_satis,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_anlik"):
-                st.session_state.anlik_stok_satis = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.anlik_stok_satis is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.anlik_stok_satis.head(10), use_container_width=True, height=300)
     
     # 6. HAFTALIK TREND
     with tab6:
@@ -398,22 +373,17 @@ elif menu == "📤 Veri Yükleme":
                 if all(col in df.columns for col in required_cols):
                     st.session_state.haftalik_trend = df
                     st.success(f"✅ {len(df)} haftalık veri yüklendi!")
+                    
+                    # Sadece ilk 10 satırı göster
+                    st.write("**İlk 10 Kayıt (Önizleme)**")
+                    st.dataframe(df.head(10), use_container_width=True, height=300)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
-        
-        if st.session_state.haftalik_trend is not None:
-            edited_df = st.data_editor(
-                st.session_state.haftalik_trend,
-                num_rows="dynamic",
-                use_container_width=True,
-                height=300
-            )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_haftalik"):
-                st.session_state.haftalik_trend = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+        elif st.session_state.haftalik_trend is not None:
+            st.write("**İlk 10 Kayıt (Önizleme)**")
+            st.dataframe(st.session_state.haftalik_trend.head(10), use_container_width=True, height=300)
     
     # 7. KPI
     with tab7:
@@ -893,9 +863,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
