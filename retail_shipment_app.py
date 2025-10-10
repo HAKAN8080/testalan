@@ -857,9 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -1090,6 +1088,12 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write(f"🔍 Debug: RPT ihtiyaç > 0: {(anlik_df['ihtiyac_rpt'] > 0).sum()}")
                 st.write(f"🔍 Debug: Min ihtiyaç > 0: {(anlik_df['ihtiyac_min'] > 0).sum()}")
                 
+                # Min hesaplama örnek kontrol
+                min_rows = anlik_df[anlik_df['Durum'] == 'Min'].head(3)
+                st.write("🔍 Debug: Min örnek hesaplama:")
+                for idx, row in min_rows.iterrows():
+                    st.write(f"  min_oran={row['min_oran']}, min_deger={row['min_deger']}, stok={row['stok']}, yol={row['yol']}, ihtiyac_min={row['ihtiyac_min']}")
+                
                 # Durum'a göre final ihtiyacı belirle
                 anlik_df['ihtiyac'] = anlik_df.apply(
                     lambda row: row['ihtiyac_rpt'] if row['Durum'] == 'RPT' else row['ihtiyac_min'],
@@ -1099,7 +1103,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Negatif ihtiyaçları 0 yap (min için: <=0 ise 0)
                 anlik_df['ihtiyac'] = anlik_df['ihtiyac'].clip(lower=0)
                 
-                st.write(f"🔍 Debug: İhtiyaç > 0 olan kayıt: {(anlik_df['ihtiyac'] > 0).sum()}")
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan kayıt (tüm): {(anlik_df['ihtiyac'] > 0).sum()}")
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan RPT: {((anlik_df['ihtiyac'] > 0) & (anlik_df['Durum'] == 'RPT')).sum()}")
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan Min: {((anlik_df['ihtiyac'] > 0) & (anlik_df['Durum'] == 'Min')).sum()}")
                 
                 # max_deger kontrolü - sevkiyat + stok + yol toplamı max_deger'i geçemesin
                 anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
@@ -1189,6 +1195,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     
                     # Depo stoğu var mı kontrol et
                     if key in depo_stok_dict:
+                        eslesme_sayisi += 1
                         kalan_stok = depo_stok_dict[key]
                         
                         # İhtiyaç kadar verilebilirse ver, yoksa kalanı ver
@@ -1203,6 +1210,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                         sevkiyat = 0
                     
                     sevkiyat_gercek.append(sevkiyat)
+                
+                st.write(f"🔍 Debug: Depo-ürün eşleşme sayısı: {eslesme_sayisi} / {len(result_df)}")
                 
                 result_df['sevkiyat_gercek'] = sevkiyat_gercek
                 
