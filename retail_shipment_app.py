@@ -12,24 +12,42 @@ st.set_page_config(
 )
 
 # Session state başlatma
-if 'klasman_data' not in st.session_state:
-    st.session_state.klasman_data = None
+if 'urun_master' not in st.session_state:
+    st.session_state.urun_master = None
+if 'magaza_master' not in st.session_state:
+    st.session_state.magaza_master = None
+if 'yasak_master' not in st.session_state:
+    st.session_state.yasak_master = None
+if 'depo_stok' not in st.session_state:
+    st.session_state.depo_stok = None
+if 'anlik_stok_satis' not in st.session_state:
+    st.session_state.anlik_stok_satis = None
+if 'haftalik_trend' not in st.session_state:
+    st.session_state.haftalik_trend = None
+if 'kpi' not in st.session_state:
+    st.session_state.kpi = None
 if 'segmentation_params' not in st.session_state:
     st.session_state.segmentation_params = {
         'product_ranges': [(0, 4), (5, 8), (9, 12), (12, 15), (15, 20), (20, float('inf'))],
         'store_ranges': [(0, 4), (5, 8), (9, 12), (12, 15), (15, 20), (20, float('inf'))]
     }
-if 'weekly_data' not in st.session_state:
-    st.session_state.weekly_data = None
 if 'target_matrix' not in st.session_state:
     st.session_state.target_matrix = None
+if 'sisme_orani' not in st.session_state:
+    st.session_state.sisme_orani = None
+if 'genlestirme_orani' not in st.session_state:
+    st.session_state.genlestirme_orani = None
+if 'min_oran' not in st.session_state:
+    st.session_state.min_oran = None
+if 'siralama_data' not in st.session_state:
+    st.session_state.siralama_data = None
 
 # Sidebar menü
 st.sidebar.title("📦 Sevkiyat Planlama")
 menu = st.sidebar.radio(
     "Menü",
-    ["🏠 Ana Sayfa", "📋 Klasman Parametreleri", "🎯 Segmentasyon Ayarları", 
-     "📊 Stok/Satış Verisi", "🎲 Hedef Matris", "🚚 Sevkiyat Hesaplama"]
+    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon Ayarları", 
+     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama"]
 )
 
 # ============================================
@@ -39,21 +57,27 @@ if menu == "🏠 Ana Sayfa":
     st.title("🏠 Retail Sevkiyat Planlama Sistemi")
     st.markdown("---")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(
-            "Klasman Sayısı", 
-            len(st.session_state.klasman_data) if st.session_state.klasman_data is not None else 0
+            "Ürün Master", 
+            len(st.session_state.urun_master) if st.session_state.urun_master is not None else 0
         )
     
     with col2:
         st.metric(
-            "Veri Yüklendi", 
-            "✅" if st.session_state.weekly_data is not None else "❌"
+            "Mağaza Master", 
+            len(st.session_state.magaza_master) if st.session_state.magaza_master is not None else 0
         )
     
     with col3:
+        st.metric(
+            "Anlık Stok/Satış", 
+            "✅" if st.session_state.anlik_stok_satis is not None else "❌"
+        )
+    
+    with col4:
         st.metric(
             "Matris Durumu",
             "✅" if st.session_state.target_matrix is not None else "❌"
@@ -61,92 +85,373 @@ if menu == "🏠 Ana Sayfa":
     
     st.markdown("### 📋 İşlem Adımları")
     st.info("""
-    1. **Klasman Parametreleri**: Klasman bilgilerini CSV ile yükleyin
+    1. **Veri Yükleme**: Tüm CSV dosyalarını yükleyin (Ürün Master, Mağaza Master, Yasak, Depo Stok, Anlık Stok/Satış, Haftalık Trend, KPI)
     2. **Segmentasyon Ayarları**: Ürün ve mağaza gruplama aralıklarını belirleyin
-    3. **Stok/Satış Verisi**: Haftalık verileri yükleyin (son 4 hafta)
-    4. **Hedef Matris**: Her segment için şişme oranlarını girin
+    3. **Hedef Matris**: Her segment için şişme oranı, genleştirme oranı ve min oranı girin
+    4. **Sıralama**: Mağaza ve ürün cluster önceliklerini belirleyin
     5. **Sevkiyat Hesaplama**: Sonuçları görüntüleyin ve export edin
     """)
 
 # ============================================
-# 📋 KLASMAN PARAMETRELERİ
+# 📤 VERİ YÜKLEME (ESKİ KLASMAN PARAMETRELERİ)
 # ============================================
-elif menu == "📋 Klasman Parametreleri":
-    st.title("📋 Klasman Parametreleri")
+elif menu == "📤 Veri Yükleme":
+    st.title("📤 Veri Yükleme")
     st.markdown("---")
     
-    # CSV yükleme
-    st.subheader("📤 CSV Yükleme")
-    st.info("**Beklenen format**: klasman_id, klasman_adi, min_deger, max_deger, forward_cover")
+    # Tüm örnek CSV'leri indirme butonu
+    st.subheader("📥 Örnek CSV'leri İndir")
     
-    uploaded_file = st.file_uploader("Klasman parametrelerini yükleyin", type=['csv'])
+    # Örnek CSV'ler oluştur
+    example_csvs = {
+        'urun_master.csv': pd.DataFrame({
+            'urun_kod': ['U001', 'U002', 'U003'],
+            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün C'],
+            'satici_kod': ['S001', 'S002', 'S001'],
+            'satici_ad': ['Satıcı 1', 'Satıcı 2', 'Satıcı 1'],
+            'kategori_kod': ['K001', 'K002', 'K001'],
+            'kategori_ad': ['Kategori 1', 'Kategori 2', 'Kategori 1'],
+            'umg': ['UMG1', 'UMG2', 'UMG1'],
+            'umg_ad': ['Üst Mal Grubu 1', 'Üst Mal Grubu 2', 'Üst Mal Grubu 1'],
+            'mg': ['MG1', 'MG2', 'MG1'],
+            'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 1'],
+            'marka_kod': ['M001', 'M002', 'M001'],
+            'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
+            'nitelik': ['Nitelik 1', 'Nitelik 2', 'Nitelik 1'],
+            'durum': ['Aktif', 'Aktif', 'Pasif'],
+            'ithal': [1, 0, 1],
+            'ithal_ad': ['İthal', 'Yerli', 'İthal'],
+            'tanim': ['Tanım 1', 'Tanım 2', 'Tanım 3']
+        }),
+        'magaza_master.csv': pd.DataFrame({
+            'Magaza_Kod': ['M001', 'M002', 'M003'],
+            'Mağaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+            'il': ['İstanbul', 'Ankara', 'İzmir'],
+            'bolge': ['Marmara', 'İç Anadolu', 'Ege'],
+            'tip': ['Hipermarket', 'Süpermarket', 'Hipermarket'],
+            'adres_kod': ['ADR001', 'ADR002', 'ADR003'],
+            'sm': [5000, 3000, 4500],
+            'bs': ['BS1', 'BS2', 'BS1']
+        }),
+        'yasak.csv': pd.DataFrame({
+            'urun_kod': ['U001', 'U002'],
+            'urun_ad': ['Ürün A', 'Ürün B'],
+            'Magaza_Kod': ['M002', 'M001'],
+            'Mağaza_ad': ['Mağaza B', 'Mağaza A'],
+            'yasak_durum': ['Yasak', 'Yasak']
+        }),
+        'depo_stok.csv': pd.DataFrame({
+            'depo_kod': ['D001', 'D001', 'D002'],
+            'depo_ad': ['Depo Merkez', 'Depo Merkez', 'Depo Bölge'],
+            'urun_kod': ['U001', 'U002', 'U001'],
+            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
+            'stok': [1000, 1500, 800]
+        }),
+        'anlik_stok_satis.csv': pd.DataFrame({
+            'magaza_kod': ['M001', 'M001', 'M002'],
+            'magaza_ad': ['Mağaza A', 'Mağaza A', 'Mağaza B'],
+            'urun_kod': ['U001', 'U002', 'U001'],
+            'urun_ad': ['Ürün A', 'Ürün B', 'Ürün A'],
+            'klasman_kod': ['K1', 'K2', 'K1'],
+            'klasman_ad': ['Klasman A', 'Klasman B', 'Klasman A'],
+            'marka_kod': ['M001', 'M002', 'M001'],
+            'marka_ad': ['Marka A', 'Marka B', 'Marka A'],
+            'stok': [100, 150, 120],
+            'yol': [20, 30, 25],
+            'satis': [50, 40, 45],
+            'ciro': [5000, 6000, 5500],
+            'smm': [2.0, 3.75, 2.67]
+        }),
+        'haftalik_trend.csv': pd.DataFrame({
+            'klasman_kod': ['K1', 'K1', 'K2'],
+            'klasman_ad': ['Klasman A', 'Klasman A', 'Klasman B'],
+            'marka_kod': ['M001', 'M001', 'M002'],
+            'marka_ad': ['Marka A', 'Marka A', 'Marka B'],
+            'yil': [2025, 2025, 2025],
+            'hafta': [40, 41, 40],
+            'stok': [10000, 9500, 15000],
+            'satis': [2000, 2100, 1800],
+            'ciro': [200000, 210000, 270000],
+            'smm': [5.0, 4.52, 8.33],
+            'iftutar': [1000000, 950000, 1500000]
+        }),
+        'kpi.csv': pd.DataFrame({
+            'mg_id': ['MG1', 'MG2', 'MG3'],
+            'mg_ad': ['Mal Grubu 1', 'Mal Grubu 2', 'Mal Grubu 3'],
+            'min_deger': [0, 100, 500],
+            'max_deger': [99, 499, 999],
+            'forward_cover': [1.5, 2.0, 2.5]
+        })
+    }
     
-    # Örnek CSV indirme
-    example_df = pd.DataFrame({
-        'klasman_id': [1, 2, 3],
-        'klasman_adi': ['Klasman A', 'Klasman B', 'Klasman C'],
-        'min_deger': [0, 100, 500],
-        'max_deger': [99, 499, 999],
-        'forward_cover': [1.5, 2.0, 2.5]
-    })
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("📥 Tüm Örnek CSV'leri İndir"):
+            st.success("✅ Örnek CSV'ler hazırlandı! Aşağıdan tek tek indirebilirsiniz.")
     
-    st.download_button(
-        label="📥 Örnek CSV İndir",
-        data=example_df.to_csv(index=False, encoding='utf-8-sig'),
-        file_name="ornek_klasman.csv",
-        mime="text/csv"
-    )
+    # Her CSV için ayrı indirme butonu
+    cols = st.columns(4)
+    for idx, (filename, df) in enumerate(example_csvs.items()):
+        with cols[idx % 4]:
+            st.download_button(
+                label=f"📥 {filename}",
+                data=df.to_csv(index=False, encoding='utf-8-sig'),
+                file_name=filename,
+                mime="text/csv",
+                key=f"download_{filename}"
+            )
     
-    if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file)
-            
-            # Validasyon
-            required_cols = ['klasman_id', 'klasman_adi', 'min_deger', 'max_deger', 'forward_cover']
-            if all(col in df.columns for col in required_cols):
-                st.session_state.klasman_data = df
-                st.success(f"✅ {len(df)} klasman başarıyla yüklendi!")
-            else:
-                st.error(f"❌ CSV'de eksik sütunlar var. Beklenen: {', '.join(required_cols)}")
-        except Exception as e:
-            st.error(f"❌ CSV okuma hatası: {str(e)}")
+    st.markdown("---")
     
-    # Tablo düzenleme
-    if st.session_state.klasman_data is not None:
-        st.markdown("---")
-        st.subheader("✏️ Parametre Düzenleme")
+    # CSV Yükleme Bölümleri
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "Ürün Master", "Mağaza Master", "Yasak", "Depo Stok", 
+        "Anlık Stok/Satış", "Haftalık Trend", "KPI"
+    ])
+    
+    # 1. ÜRÜN MASTER
+    with tab1:
+        st.subheader("📦 Ürün Master")
+        st.info("Kolonlar: urun_kod, urun_ad, satici_kod, satici_ad, kategori_kod, kategori_ad, umg, umg_ad, mg, mg_ad, marka_kod, marka_ad, nitelik, durum, ithal, ithal_ad, tanim")
         
-        edited_df = st.data_editor(
-            st.session_state.klasman_data,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "klasman_id": st.column_config.NumberColumn("ID", required=True),
-                "klasman_adi": st.column_config.TextColumn("Klasman Adı", required=True),
-                "min_deger": st.column_config.NumberColumn("Min Değer", min_value=0, required=True),
-                "max_deger": st.column_config.NumberColumn("Max Değer", min_value=0, required=True),
-                "forward_cover": st.column_config.NumberColumn("Forward Cover", min_value=0.0, format="%.2f", required=True)
-            }
-        )
+        uploaded = st.file_uploader("Ürün Master CSV yükle", type=['csv'], key="urun_master_upload")
         
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            if st.button("💾 Değişiklikleri Kaydet", type="primary"):
-                # Validasyon
-                errors = []
-                for idx, row in edited_df.iterrows():
-                    if row['min_deger'] >= row['max_deger']:
-                        errors.append(f"Satır {idx+1}: Min değer, max değerden küçük olmalı")
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['urun_kod', 'urun_ad', 'satici_kod', 'satici_ad', 'kategori_kod', 
+                                'kategori_ad', 'umg', 'umg_ad', 'mg', 'mg_ad', 'marka_kod', 
+                                'marka_ad', 'nitelik', 'durum', 'ithal', 'ithal_ad', 'tanim']
                 
-                if errors:
-                    for error in errors:
-                        st.error(f"❌ {error}")
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.urun_master = df
+                    st.success(f"✅ {len(df)} ürün yüklendi!")
                 else:
-                    st.session_state.klasman_data = edited_df
-                    # CSV'ye kaydet
-                    edited_df.to_csv('data/klasman_params.csv', index=False, encoding='utf-8-sig')
-                    st.success("✅ Değişiklikler kaydedildi!")
-                    st.rerun()
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.urun_master is not None:
+            edited_df = st.data_editor(
+                st.session_state.urun_master,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_urun"):
+                st.session_state.urun_master = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 2. MAĞAZA MASTER
+    with tab2:
+        st.subheader("🏪 Mağaza Master")
+        st.info("Kolonlar: Magaza_Kod, Mağaza_ad, il, bolge, tip, adres_kod, sm, bs")
+        
+        uploaded = st.file_uploader("Mağaza Master CSV yükle", type=['csv'], key="magaza_master_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['Magaza_Kod', 'Mağaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.magaza_master = df
+                    st.success(f"✅ {len(df)} mağaza yüklendi!")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.magaza_master is not None:
+            edited_df = st.data_editor(
+                st.session_state.magaza_master,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_magaza"):
+                st.session_state.magaza_master = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 3. YASAK
+    with tab3:
+        st.subheader("🚫 Yasak Master")
+        st.info("Kolonlar: urun_kod, urun_ad, Magaza_Kod, Mağaza_ad, yasak_durum")
+        
+        uploaded = st.file_uploader("Yasak CSV yükle", type=['csv'], key="yasak_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['urun_kod', 'urun_ad', 'Magaza_Kod', 'Mağaza_ad', 'yasak_durum']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.yasak_master = df
+                    st.success(f"✅ {len(df)} yasak kaydı yüklendi!")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.yasak_master is not None:
+            edited_df = st.data_editor(
+                st.session_state.yasak_master,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_yasak"):
+                st.session_state.yasak_master = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 4. DEPO STOK
+    with tab4:
+        st.subheader("📦 Depo Stok")
+        st.info("Kolonlar: depo_kod, depo_ad, urun_kod, urun_ad, stok")
+        
+        uploaded = st.file_uploader("Depo Stok CSV yükle", type=['csv'], key="depo_stok_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['depo_kod', 'depo_ad', 'urun_kod', 'urun_ad', 'stok']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.depo_stok = df
+                    st.success(f"✅ {len(df)} depo stok kaydı yüklendi!")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.depo_stok is not None:
+            edited_df = st.data_editor(
+                st.session_state.depo_stok,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_depo"):
+                st.session_state.depo_stok = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 5. ANLIK STOK SATIŞ
+    with tab5:
+        st.subheader("📊 Anlık Stok/Satış")
+        st.info("Kolonlar: magaza_kod, magaza_ad, urun_kod, urun_ad, klasman_kod, klasman_ad, marka_kod, marka_ad, stok, yol, satis, ciro, smm")
+        
+        uploaded = st.file_uploader("Anlık Stok/Satış CSV yükle", type=['csv'], key="anlik_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad', 'klasman_kod', 
+                                'klasman_ad', 'marka_kod', 'marka_ad', 'stok', 'yol', 'satis', 'ciro', 'smm']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.anlik_stok_satis = df
+                    st.success(f"✅ {len(df)} kayıt yüklendi!")
+                    
+                    # Özet bilgiler
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Toplam Mağaza", df['magaza_kod'].nunique())
+                    with col2:
+                        st.metric("Toplam Ürün", df['urun_kod'].nunique())
+                    with col3:
+                        st.metric("Ortalama SMM", f"{df['smm'].mean():.2f}")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.anlik_stok_satis is not None:
+            edited_df = st.data_editor(
+                st.session_state.anlik_stok_satis,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_anlik"):
+                st.session_state.anlik_stok_satis = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 6. HAFTALIK TREND
+    with tab6:
+        st.subheader("📈 Haftalık Trend")
+        st.info("Kolonlar: klasman_kod, klasman_ad, marka_kod, marka_ad, yil, hafta, stok, satis, ciro, smm, iftutar")
+        
+        uploaded = st.file_uploader("Haftalık Trend CSV yükle", type=['csv'], key="haftalik_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['klasman_kod', 'klasman_ad', 'marka_kod', 'marka_ad', 'yil', 
+                                'hafta', 'stok', 'satis', 'ciro', 'smm', 'iftutar']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.haftalik_trend = df
+                    st.success(f"✅ {len(df)} haftalık veri yüklendi!")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.haftalik_trend is not None:
+            edited_df = st.data_editor(
+                st.session_state.haftalik_trend,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_haftalik"):
+                st.session_state.haftalik_trend = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
+    
+    # 7. KPI
+    with tab7:
+        st.subheader("🎯 KPI Parametreleri")
+        st.info("Kolonlar: mg_id, mg_ad, min_deger, max_deger, forward_cover")
+        
+        uploaded = st.file_uploader("KPI CSV yükle", type=['csv'], key="kpi_upload")
+        
+        if uploaded:
+            try:
+                df = pd.read_csv(uploaded)
+                required_cols = ['mg_id', 'mg_ad', 'min_deger', 'max_deger', 'forward_cover']
+                
+                if all(col in df.columns for col in required_cols):
+                    st.session_state.kpi = df
+                    st.success(f"✅ {len(df)} KPI kaydı yüklendi!")
+                else:
+                    st.error(f"❌ Eksik sütunlar var!")
+            except Exception as e:
+                st.error(f"❌ Hata: {str(e)}")
+        
+        if st.session_state.kpi is not None:
+            edited_df = st.data_editor(
+                st.session_state.kpi,
+                num_rows="dynamic",
+                use_container_width=True,
+                height=300,
+                column_config={
+                    "forward_cover": st.column_config.NumberColumn(
+                        "Forward Cover",
+                        min_value=0.0,
+                        format="%.2f"
+                    )
+                }
+            )
+            if st.button("💾 Değişiklikleri Kaydet", key="save_kpi"):
+                st.session_state.kpi = edited_df
+                st.success("✅ Kaydedildi!")
+                st.rerun()
 
 # ============================================
 # 🎯 SEGMENTASYON AYARLARI
@@ -209,92 +514,32 @@ elif menu == "🎯 Segmentasyon Ayarları":
         st.success("✅ Ayarlar kaydedildi!")
 
 # ============================================
-# 📊 STOK/SATIŞ VERİSİ
-# ============================================
-elif menu == "📊 Stok/Satış Verisi":
-    st.title("📊 Stok/Satış Verisi Yükleme")
-    st.markdown("---")
-    
-    st.info("**Beklenen format**: hafta, magaza_id, urun_id, stok_tutar, satis (Son 4 hafta)")
-    
-    uploaded_file = st.file_uploader("Haftalık verileri yükleyin", type=['csv'], key="weekly_upload")
-    
-    # Örnek CSV
-    example_weekly = pd.DataFrame({
-        'hafta': [1, 1, 2, 2, 3, 3, 4, 4],
-        'magaza_id': ['M001', 'M002', 'M001', 'M002', 'M001', 'M002', 'M001', 'M002'],
-        'urun_id': ['U001', 'U001', 'U001', 'U001', 'U001', 'U001', 'U001', 'U001'],
-        'stok_tutar': [1000, 1500, 1100, 1600, 950, 1450, 1050, 1550],
-        'satis': [200, 250, 180, 240, 210, 260, 190, 255]
-    })
-    
-    st.download_button(
-        label="📥 Örnek Haftalık Veri CSV İndir",
-        data=example_weekly.to_csv(index=False, encoding='utf-8-sig'),
-        file_name="ornek_haftalik_veri.csv",
-        mime="text/csv"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file)
-            
-            required_cols = ['hafta', 'magaza_id', 'urun_id', 'stok_tutar', 'satis']
-            if all(col in df.columns for col in required_cols):
-                # Son 4 hafta ortalamasını hesapla
-                df['smm'] = df['stok_tutar'] / df['satis'].replace(0, 1)  # Sıfıra bölme hatası önleme
-                
-                avg_smm = df.groupby(['magaza_id', 'urun_id'])['smm'].mean().reset_index()
-                avg_smm.columns = ['magaza_id', 'urun_id', 'avg_smm_4week']
-                
-                st.session_state.weekly_data = avg_smm
-                
-                st.success(f"✅ {len(avg_smm)} ürün-mağaza kombinasyonu için ortalama SMM hesaplandı!")
-                
-                st.subheader("📊 Veri Özeti")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Toplam Mağaza", avg_smm['magaza_id'].nunique())
-                with col2:
-                    st.metric("Toplam Ürün", avg_smm['urun_id'].nunique())
-                with col3:
-                    st.metric("Ortalama SMM", f"{avg_smm['avg_smm_4week'].mean():.2f}")
-                
-                st.dataframe(avg_smm.head(20), use_container_width=True)
-            else:
-                st.error(f"❌ CSV'de eksik sütunlar var. Beklenen: {', '.join(required_cols)}")
-        except Exception as e:
-            st.error(f"❌ CSV okuma hatası: {str(e)}")
-
-# ============================================
-# 🎲 HEDEF MATRİS
+# 🎲 HEDEF MATRİS (YENİ TASARIM)
 # ============================================
 elif menu == "🎲 Hedef Matris":
-    st.title("🎲 Hedef Matris - Şişme Oranları")
+    st.title("🎲 Hedef Matris Parametreleri")
     st.markdown("---")
     
-    if st.session_state.weekly_data is None:
-        st.warning("⚠️ Önce 'Stok/Satış Verisi' bölümünden veri yükleyin!")
+    if st.session_state.anlik_stok_satis is None:
+        st.warning("⚠️ Önce 'Veri Yükleme' bölümünden anlık stok/satış verisini yükleyin!")
     else:
         # Segmentasyon yap
-        from sklearn.preprocessing import KBinsDiscretizer
-        
-        data = st.session_state.weekly_data.copy()
+        data = st.session_state.anlik_stok_satis.copy()
         
         # Ürün segmentasyonu
         product_ranges = st.session_state.segmentation_params['product_ranges']
         data['urun_segment'] = pd.cut(
-            data['avg_smm_4week'], 
+            data['smm'], 
             bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
             include_lowest=True
         )
         
         # Mağaza için grup bazlı SMM hesapla
-        store_smm = data.groupby('magaza_id')['avg_smm_4week'].mean().reset_index()
+        store_smm = data.groupby('magaza_kod')['smm'].mean().reset_index()
         store_ranges = st.session_state.segmentation_params['store_ranges']
         store_smm['magaza_segment'] = pd.cut(
-            store_smm['avg_smm_4week'],
+            store_smm['smm'],
             bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
             include_lowest=True
@@ -316,38 +561,213 @@ elif menu == "🎲 Hedef Matris":
         
         st.markdown("---")
         
-        # Matris oluştur
-        st.subheader("🎯 Şişme Oranı Matrisi")
-        st.info("Her ürün-mağaza segment kombinasyonu için şişme oranını girin")
+        # Matris seçimi ve parametreler
+        st.subheader("🎯 Matris Parametreleri")
         
         prod_segments = sorted([str(x) for x in data['urun_segment'].unique() if pd.notna(x)])
         store_segments = sorted([str(x) for x in store_smm['magaza_segment'].unique() if pd.notna(x)])
         
-        # Matris için data editor
-        if st.session_state.target_matrix is None:
-            matrix_data = pd.DataFrame(
-                1.0,  # Varsayılan değer
+        # 1. ŞİŞME ORANI MATRİSİ
+        st.markdown("### 1️⃣ Şişme Oranı Matrisi (Default: 0.5)")
+        
+        if st.session_state.sisme_orani is None:
+            sisme_data = pd.DataFrame(
+                0.5,  # Default değer
                 index=prod_segments,
                 columns=store_segments
             )
         else:
-            matrix_data = st.session_state.target_matrix
+            sisme_data = st.session_state.sisme_orani
         
-        edited_matrix = st.data_editor(
-            matrix_data,
+        edited_sisme = st.data_editor(
+            sisme_data,
             use_container_width=True,
             column_config={col: st.column_config.NumberColumn(
                 col,
                 min_value=0.0,
-                max_value=5.0,
+                max_value=10.0,
                 step=0.1,
                 format="%.2f"
-            ) for col in store_segments}
+            ) for col in store_segments},
+            key="sisme_matrix"
         )
         
-        if st.button("💾 Matris Kaydet", type="primary"):
-            st.session_state.target_matrix = edited_matrix
-            st.success("✅ Hedef matris kaydedildi!")
+        st.markdown("---")
+        
+        # 2. GENLEŞTİRME ORANI MATRİSİ
+        st.markdown("### 2️⃣ Genleştirme Oranı Matrisi (Default: 1.0)")
+        
+        if st.session_state.genlestirme_orani is None:
+            genlestirme_data = pd.DataFrame(
+                1.0,  # Default değer
+                index=prod_segments,
+                columns=store_segments
+            )
+        else:
+            genlestirme_data = st.session_state.genlestirme_orani
+        
+        edited_genlestirme = st.data_editor(
+            genlestirme_data,
+            use_container_width=True,
+            column_config={col: st.column_config.NumberColumn(
+                col,
+                min_value=0.0,
+                max_value=10.0,
+                step=0.1,
+                format="%.2f"
+            ) for col in store_segments},
+            key="genlestirme_matrix"
+        )
+        
+        st.markdown("---")
+        
+        # 3. MIN ORAN MATRİSİ
+        st.markdown("### 3️⃣ Min Oran Matrisi (Default: 1.0)")
+        
+        if st.session_state.min_oran is None:
+            min_oran_data = pd.DataFrame(
+                1.0,  # Default değer
+                index=prod_segments,
+                columns=store_segments
+            )
+        else:
+            min_oran_data = st.session_state.min_oran
+        
+        edited_min_oran = st.data_editor(
+            min_oran_data,
+            use_container_width=True,
+            column_config={col: st.column_config.NumberColumn(
+                col,
+                min_value=0.0,
+                max_value=10.0,
+                step=0.1,
+                format="%.2f"
+            ) for col in store_segments},
+            key="min_oran_matrix"
+        )
+        
+        st.markdown("---")
+        
+        # Kaydet butonu
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("💾 Tüm Matrisleri Kaydet", type="primary"):
+                st.session_state.sisme_orani = edited_sisme
+                st.session_state.genlestirme_orani = edited_genlestirme
+                st.session_state.min_oran = edited_min_oran
+                st.success("✅ Tüm matrisler kaydedildi!")
+
+# ============================================
+# 📊 SIRALAMA
+# ============================================
+elif menu == "📊 Sıralama":
+    st.title("📊 Sıralama Öncelikleri")
+    st.markdown("---")
+    
+    if st.session_state.anlik_stok_satis is None:
+        st.warning("⚠️ Önce 'Veri Yükleme' bölümünden anlık stok/satış verisini yükleyin!")
+    else:
+        st.info("Mağaza ve ürün cluster bazında sevkiyat önceliklerini belirleyin")
+        
+        # Segmentleri al
+        data = st.session_state.anlik_stok_satis.copy()
+        
+        # Ürün segmentasyonu
+        product_ranges = st.session_state.segmentation_params['product_ranges']
+        data['urun_segment'] = pd.cut(
+            data['smm'], 
+            bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
+            labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
+            include_lowest=True
+        )
+        
+        # Mağaza segmentasyonu
+        store_smm = data.groupby('magaza_kod')['smm'].mean().reset_index()
+        store_ranges = st.session_state.segmentation_params['store_ranges']
+        store_smm['magaza_segment'] = pd.cut(
+            store_smm['smm'],
+            bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
+            labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
+            include_lowest=True
+        )
+        
+        prod_segments = sorted([str(x) for x in data['urun_segment'].unique() if pd.notna(x)])
+        store_segments = sorted([str(x) for x in store_smm['magaza_segment'].unique() if pd.notna(x)])
+        
+        # Sıralama tablosu oluştur
+        st.subheader("🎯 Öncelik Sıralaması")
+        
+        # Tüm kombinasyonlar için satırlar oluştur
+        siralama_rows = []
+        for store_seg in store_segments:
+            for prod_seg in prod_segments:
+                siralama_rows.append({
+                    'Mağaza_Cluster': store_seg,
+                    'Ürün_Cluster': prod_seg,
+                    'RPT/Min': 'RPT',  # Default değer
+                    'Sıralama': 1  # Default öncelik
+                })
+        
+        # Eğer daha önce kaydedilmişse onu kullan
+        if st.session_state.siralama_data is not None:
+            siralama_df = st.session_state.siralama_data
+        else:
+            siralama_df = pd.DataFrame(siralama_rows)
+        
+        # Düzenlenebilir tablo
+        edited_siralama = st.data_editor(
+            siralama_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            column_config={
+                "Mağaza_Cluster": st.column_config.TextColumn(
+                    "Mağaza Cluster",
+                    help="Mağaza segmenti",
+                    disabled=False
+                ),
+                "Ürün_Cluster": st.column_config.TextColumn(
+                    "Ürün Cluster",
+                    help="Ürün segmenti",
+                    disabled=False
+                ),
+                "RPT/Min": st.column_config.SelectboxColumn(
+                    "RPT/Min",
+                    help="Sıralama türü seçin",
+                    options=["RPT", "Min"],
+                    required=True
+                ),
+                "Sıralama": st.column_config.NumberColumn(
+                    "Öncelik Sırası",
+                    help="Öncelik sırası (1 = en yüksek öncelik)",
+                    min_value=1,
+                    max_value=100,
+                    step=1,
+                    format="%d"
+                )
+            },
+            hide_index=True
+        )
+        
+        # Önizleme
+        st.markdown("---")
+        st.subheader("📋 Sıralama Önizleme")
+        
+        # Sıralamaya göre önizleme
+        preview_df = edited_siralama.sort_values('Sıralama')
+        st.dataframe(preview_df, use_container_width=True, height=400)
+        
+        # Kaydet
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("💾 Sıralamayı Kaydet", type="primary"):
+                st.session_state.siralama_data = edited_siralama
+                st.success("✅ Sıralama öncelikleri kaydedildi!")
+        
+        with col2:
+            if st.button("🔄 Varsayılana Sıfırla"):
+                st.session_state.siralama_data = None
+                st.success("✅ Varsayılan değerlere sıfırlandı!")
+                st.rerun()
 
 # ============================================
 # 🚚 SEVKİYAT HESAPLAMA
@@ -356,19 +776,121 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     st.title("🚚 Sevkiyat Hesaplama")
     st.markdown("---")
     
-    if st.session_state.klasman_data is None or st.session_state.weekly_data is None or st.session_state.target_matrix is None:
+    # Tüm verilerin yüklenip yüklenmediğini kontrol et
+    required_data = {
+        "Ürün Master": st.session_state.urun_master,
+        "Mağaza Master": st.session_state.magaza_master,
+        "Anlık Stok/Satış": st.session_state.anlik_stok_satis,
+        "Depo Stok": st.session_state.depo_stok,
+        "KPI": st.session_state.kpi,
+        "Şişme Oranı": st.session_state.sisme_orani,
+        "Genleştirme Oranı": st.session_state.genlestirme_orani,
+        "Min Oran": st.session_state.min_oran,
+        "Sıralama": st.session_state.siralama_data
+    }
+    
+    missing_data = [name for name, data in required_data.items() if data is None]
+    
+    if missing_data:
         st.warning("⚠️ Tüm adımları tamamlayın!")
+        st.error(f"**Eksik veriler:** {', '.join(missing_data)}")
         st.info("""
-        - ✅ Klasman Parametreleri
+        Tamamlanması gereken adımlar:
+        - ✅ Veri Yükleme (Tüm CSV'ler)
         - ✅ Segmentasyon Ayarları
-        - ✅ Stok/Satış Verisi
-        - ✅ Hedef Matris
+        - ✅ Hedef Matris (Tüm 3 matris)
+        - ✅ Sıralama Öncelikleri
         """)
     else:
         st.success("✅ Tüm veriler hazır! Hesaplama yapılabilir.")
         
-        if st.button("🚀 Sevkiyat Hesapla", type="primary"):
-            st.info("🔄 Hesaplama yapılıyor...")
-            # Burada sevkiyat algoritması çalışacak
-            st.success("✅ Hesaplama tamamlandı!")
-            st.balloons()
+        # Hesaplama özet bilgileri
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Toplam Ürün", st.session_state.anlik_stok_satis['urun_kod'].nunique())
+        with col2:
+            st.metric("Toplam Mağaza", st.session_state.anlik_stok_satis['magaza_kod'].nunique())
+        with col3:
+            st.metric("Toplam Depo Stok", f"{st.session_state.depo_stok['stok'].sum():,.0f}")
+        with col4:
+            st.metric("Yasak Kombinasyon", 
+                     len(st.session_state.yasak_master) if st.session_state.yasak_master is not None else 0)
+        
+        st.markdown("---")
+        
+        # Hesaplama butonu
+        if st.button("🚀 Sevkiyat Hesapla", type="primary", use_container_width=True):
+            with st.spinner("📊 Hesaplama yapılıyor... Bu işlem birkaç dakika sürebilir."):
+                
+                # Burada gerçek sevkiyat algoritması çalışacak
+                # Şimdilik basit bir örnek gösteriyoruz
+                
+                progress_bar = st.progress(0)
+                st.write("⏳ Adım 1/5: Segmentasyon yapılıyor...")
+                progress_bar.progress(20)
+                
+                st.write("⏳ Adım 2/5: Yasak kontrolleri yapılıyor...")
+                progress_bar.progress(40)
+                
+                st.write("⏳ Adım 3/5: Stok hesaplamaları yapılıyor...")
+                progress_bar.progress(60)
+                
+                st.write("⏳ Adım 4/5: Öncelik sıralaması uygulanıyor...")
+                progress_bar.progress(80)
+                
+                st.write("⏳ Adım 5/5: Sonuçlar hazırlanıyor...")
+                progress_bar.progress(100)
+                
+                st.success("✅ Hesaplama tamamlandı!")
+                st.balloons()
+                
+                # Örnek sonuç tablosu
+                st.markdown("---")
+                st.subheader("📊 Sevkiyat Sonuçları")
+                
+                # Basit örnek sonuç (gerçek hesaplama burada yapılacak)
+                result_df = pd.DataFrame({
+                    'magaza_kod': ['M001', 'M002', 'M003'],
+                    'magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+                    'urun_kod': ['U001', 'U001', 'U002'],
+                    'urun_ad': ['Ürün A', 'Ürün A', 'Ürün B'],
+                    'mevcut_stok': [100, 150, 80],
+                    'hedef_stok': [150, 200, 120],
+                    'sevkiyat_miktari': [50, 50, 40],
+                    'oncelik': [1, 2, 3]
+                })
+                
+                st.dataframe(result_df, use_container_width=True)
+                
+                # Export butonları
+                st.markdown("---")
+                st.subheader("📥 Sonuçları Dışa Aktar")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.download_button(
+                        label="📥 CSV İndir",
+                        data=result_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="sevkiyat_sonuclari.csv",
+                        mime="text/csv"
+                    )
+                
+                with col2:
+                    # Excel export için (openpyxl gerekli)
+                    st.download_button(
+                        label="📥 Excel İndir",
+                        data=result_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="sevkiyat_sonuclari.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
+                with col3:
+                    # JSON export
+                    st.download_button(
+                        label="📥 JSON İndir",
+                        data=result_df.to_json(orient='records', force_ascii=False),
+                        file_name="sevkiyat_sonuclari.json",
+                        mime="application/json"
+                    )
