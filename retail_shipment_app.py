@@ -1046,11 +1046,14 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write("⏳ Adım 4/6: İhtiyaç hesaplanıyor...")
                 progress_bar.progress(60)
                 
-                # Debug: Öncelik sıralaması kontrolü
+                # Debug: Veri kontrolü
                 st.write(f"🔍 Debug: Toplam kayıt sayısı: {len(anlik_df)}")
-                st.write(f"🔍 Debug: Öncelik bilgisi olan kayıt: {anlik_df['Oncelik'].notna().sum()}")
+                st.write(f"🔍 Debug: Benzersiz mağaza segment: {anlik_df['magaza_segment'].nunique()}")
+                st.write(f"🔍 Debug: Benzersiz ürün segment: {anlik_df['urun_segment'].nunique()}")
                 
                 # Öncelik sıralaması ekle
+                st.write(f"🔍 Debug: Sıralama tablosu satır sayısı: {len(siralama_df)}")
+                
                 anlik_df = anlik_df.merge(
                     siralama_df,
                     left_on=['magaza_segment', 'urun_segment', 'Durum'],
@@ -1058,6 +1061,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     how='left'
                 )
                 
+                st.write(f"🔍 Debug: Merge sonrası kayıt sayısı: {len(anlik_df)}")
                 st.write(f"🔍 Debug: Merge sonrası öncelik olan kayıt: {anlik_df['Oncelik'].notna().sum()}")
                 
                 # İhtiyaç hesapla
