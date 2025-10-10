@@ -124,20 +124,21 @@ elif menu == "📤 Veri Yükleme":
             'tanim': ['Tanım 1', 'Tanım 2', 'Tanım 3']
         }),
         'magaza_master.csv': pd.DataFrame({
-            'Magaza_Kod': ['M001', 'M002', 'M003'],
-            'Magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+            'magaza_kod': ['M001', 'M002', 'M003'],
+            'magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
             'il': ['İstanbul', 'Ankara', 'İzmir'],
             'bolge': ['Marmara', 'İç Anadolu', 'Ege'],
             'tip': ['Hipermarket', 'Süpermarket', 'Hipermarket'],
             'adres_kod': ['ADR001', 'ADR002', 'ADR003'],
             'sm': [5000, 3000, 4500],
-            'bs': ['BS1', 'BS2', 'BS1']
+            'bs': ['BS1', 'BS2', 'BS1'],
+            'depo_kod': ['D001', 'D001', 'D002']
         }),
         'yasak.csv': pd.DataFrame({
             'urun_kod': ['U001', 'U002'],
             'urun_ad': ['Ürün A', 'Ürün B'],
-            'Magaza_Kod': ['M002', 'M001'],
-            'Magaza_ad': ['Mağaza B', 'Mağaza A'],
+            'magaza_kod': ['M002', 'M001'],
+            'magaza_ad': ['Mağaza B', 'Mağaza A'],
             'yasak_durum': ['Yasak', 'Yasak']
         }),
         'depo_stok.csv': pd.DataFrame({
@@ -246,14 +247,14 @@ elif menu == "📤 Veri Yükleme":
     # 2. MAĞAZA MASTER
     with tab2:
         st.subheader("🏪 Mağaza Master")
-        st.info("Kolonlar: Magaza_Kod, Magaza_ad, il, bolge, tip, adres_kod, sm, bs")
+        st.info("Kolonlar: magaza_kod, magaza_ad, il, bolge, tip, adres_kod, sm, bs, depo_kod")
         
         uploaded = st.file_uploader("Mağaza Master CSV yükle", type=['csv'], key="magaza_master_upload")
         
         if uploaded:
             try:
                 df = pd.read_csv(uploaded)
-                required_cols = ['Magaza_Kod', 'Magaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs']
+                required_cols = ['magaza_kod', 'magaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs', 'depo_kod']
                 
                 if all(col in df.columns for col in required_cols):
                     st.session_state.magaza_master = df
@@ -278,14 +279,14 @@ elif menu == "📤 Veri Yükleme":
     # 3. YASAK
     with tab3:
         st.subheader("🚫 Yasak Master")
-        st.info("Kolonlar: urun_kod, urun_ad, Magaza_Kod, Magaza_ad, yasak_durum")
+        st.info("Kolonlar: urun_kod, urun_ad, magaza_kod, magaza_ad, yasak_durum")
         
         uploaded = st.file_uploader("Yasak CSV yükle", type=['csv'], key="yasak_upload")
         
         if uploaded:
             try:
                 df = pd.read_csv(uploaded)
-                required_cols = ['urun_kod', 'urun_ad', 'Magaza_Kod', 'Magaza_ad', 'yasak_durum']
+                required_cols = ['urun_kod', 'urun_ad', 'magaza_kod', 'magaza_ad', 'yasak_durum']
                 
                 if all(col in df.columns for col in required_cols):
                     st.session_state.yasak_master = df
@@ -460,10 +461,40 @@ elif menu == "🎯 Segmentasyon Ayarları":
     st.title("🎯 Segmentasyon Ayarları")
     st.markdown("---")
     
-    st.info("**Stok Tutar/Satış (SMM) oranına göre** ürün ve mağazaları gruplandırma")
+    st.info("**Stok/Satış oranına göre** ürün ve mağazaları gruplandırma (Toplam Stok / Toplam Satış)")
+    
+    if st.session_state.anlik_stok_satis is None:
+        st.warning("⚠️ Önce 'Veri Yükleme' bölümünden anlık stok/satış verisini yükleyin!")
+        st.stop()
+    
+    # Ürün bazında toplam stok/satış hesapla
+    data = st.session_state.anlik_stok_satis.copy()
+    
+    # Ürün bazında gruplama - Toplam Stok / Toplam Satış
+    urun_aggregated = data.groupby('urun_kod').agg({
+        'stok': 'sum',
+        'satis': 'sum'
+    }).reset_index()
+    urun_aggregated['stok_satis_orani'] = urun_aggregated['stok'] / urun_aggregated['satis'].replace(0, 1)
+    
+    # Mağaza bazında gruplama - Toplam Stok / Toplam Satış
+    magaza_aggregated = data.groupby('magaza_kod').agg({
+        'stok': 'sum',
+        'satis': 'sum'
+    }).reset_index()
+    magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
+    
+    st.markdown("### 📊 Hesaplanan Oranlar")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Ortalama Ürün Oran", f"{urun_aggregated['stok_satis_orani'].mean():.2f}")
+    with col2:
+        st.metric("Ortalama Mağaza Oran", f"{magaza_aggregated['stok_satis_orani'].mean():.2f}")
+    
+    st.markdown("---")
     
     # Ürün segmentasyonu
-    st.subheader("🏷️ Ürün Segmentasyonu")
+    st.subheader("🏷️ Ürün Segmentasyonu (Toplam Stok / Toplam Satış)")
     
     use_default_product = st.checkbox("Varsayılan aralıkları kullan (Ürün)", value=True)
     
@@ -483,10 +514,22 @@ elif menu == "🎯 Segmentasyon Ayarları":
                 max_val = st.number_input(f"Aralık {i+1} - Max", value=(i+1)*5 if i < num_ranges-1 else 999, key=f"prod_max_{i}")
             product_ranges.append((min_val, max_val))
     
+    # Ürün segmentasyonunu önizle
+    if urun_aggregated is not None and len(urun_aggregated) > 0:
+        temp_prod = urun_aggregated.copy()
+        temp_prod['segment'] = pd.cut(
+            temp_prod['stok_satis_orani'], 
+            bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
+            labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
+            include_lowest=True
+        )
+        st.write("**Ürün Dağılımı Önizleme:**")
+        st.dataframe(temp_prod['segment'].value_counts().sort_index(), use_container_width=True)
+    
     st.markdown("---")
     
     # Mağaza segmentasyonu
-    st.subheader("🏪 Mağaza Segmentasyonu")
+    st.subheader("🏪 Mağaza Segmentasyonu (Toplam Stok / Toplam Satış)")
     
     use_default_store = st.checkbox("Varsayılan aralıkları kullan (Mağaza)", value=True)
     
@@ -505,6 +548,18 @@ elif menu == "🎯 Segmentasyon Ayarları":
             with col2:
                 max_val = st.number_input(f"Aralık {i+1} - Max", value=(i+1)*5 if i < num_ranges_store-1 else 999, key=f"store_max_{i}")
             store_ranges.append((min_val, max_val))
+    
+    # Mağaza segmentasyonunu önizle
+    if magaza_aggregated is not None and len(magaza_aggregated) > 0:
+        temp_store = magaza_aggregated.copy()
+        temp_store['segment'] = pd.cut(
+            temp_store['stok_satis_orani'], 
+            bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
+            labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
+            include_lowest=True
+        )
+        st.write("**Mağaza Dağılımı Önizleme:**")
+        st.dataframe(temp_store['segment'].value_counts().sort_index(), use_container_width=True)
     
     if st.button("💾 Segmentasyon Ayarlarını Kaydet", type="primary"):
         st.session_state.segmentation_params = {
@@ -526,20 +581,33 @@ elif menu == "🎲 Hedef Matris":
         # Segmentasyon yap
         data = st.session_state.anlik_stok_satis.copy()
         
+        # Ürün bazında toplam stok/satış
+        urun_aggregated = data.groupby('urun_kod').agg({
+            'stok': 'sum',
+            'satis': 'sum'
+        }).reset_index()
+        urun_aggregated['stok_satis_orani'] = urun_aggregated['stok'] / urun_aggregated['satis'].replace(0, 1)
+        
+        # Mağaza bazında toplam stok/satış
+        magaza_aggregated = data.groupby('magaza_kod').agg({
+            'stok': 'sum',
+            'satis': 'sum'
+        }).reset_index()
+        magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
+        
         # Ürün segmentasyonu
         product_ranges = st.session_state.segmentation_params['product_ranges']
-        data['urun_segment'] = pd.cut(
-            data['smm'], 
+        urun_aggregated['urun_segment'] = pd.cut(
+            urun_aggregated['stok_satis_orani'], 
             bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
             include_lowest=True
         )
         
-        # Mağaza için grup bazlı SMM hesapla
-        store_smm = data.groupby('magaza_kod')['smm'].mean().reset_index()
+        # Mağaza segmentasyonu
         store_ranges = st.session_state.segmentation_params['store_ranges']
-        store_smm['magaza_segment'] = pd.cut(
-            store_smm['smm'],
+        magaza_aggregated['magaza_segment'] = pd.cut(
+            magaza_aggregated['stok_satis_orani'],
             bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
             include_lowest=True
@@ -551,12 +619,12 @@ elif menu == "🎲 Hedef Matris":
         col1, col2 = st.columns(2)
         with col1:
             st.write("**Ürün Dağılımı**")
-            prod_dist = data['urun_segment'].value_counts().sort_index()
+            prod_dist = urun_aggregated['urun_segment'].value_counts().sort_index()
             st.dataframe(prod_dist, use_container_width=True)
         
         with col2:
             st.write("**Mağaza Dağılımı**")
-            store_dist = store_smm['magaza_segment'].value_counts().sort_index()
+            store_dist = magaza_aggregated['magaza_segment'].value_counts().sort_index()
             st.dataframe(store_dist, use_container_width=True)
         
         st.markdown("---")
@@ -564,8 +632,8 @@ elif menu == "🎲 Hedef Matris":
         # Matris seçimi ve parametreler
         st.subheader("🎯 Matris Parametreleri")
         
-        prod_segments = sorted([str(x) for x in data['urun_segment'].unique() if pd.notna(x)])
-        store_segments = sorted([str(x) for x in store_smm['magaza_segment'].unique() if pd.notna(x)])
+        prod_segments = sorted([str(x) for x in urun_aggregated['urun_segment'].unique() if pd.notna(x)])
+        store_segments = sorted([str(x) for x in magaza_aggregated['magaza_segment'].unique() if pd.notna(x)])
         
         # 1. ŞİŞME ORANI MATRİSİ
         st.markdown("### 1️⃣ Şişme Oranı Matrisi (Default: 0.5)")
@@ -672,27 +740,40 @@ elif menu == "📊 Sıralama":
         # Segmentleri al
         data = st.session_state.anlik_stok_satis.copy()
         
+        # Ürün bazında toplam stok/satış
+        urun_aggregated = data.groupby('urun_kod').agg({
+            'stok': 'sum',
+            'satis': 'sum'
+        }).reset_index()
+        urun_aggregated['stok_satis_orani'] = urun_aggregated['stok'] / urun_aggregated['satis'].replace(0, 1)
+        
+        # Mağaza bazında toplam stok/satış
+        magaza_aggregated = data.groupby('magaza_kod').agg({
+            'stok': 'sum',
+            'satis': 'sum'
+        }).reset_index()
+        magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
+        
         # Ürün segmentasyonu
         product_ranges = st.session_state.segmentation_params['product_ranges']
-        data['urun_segment'] = pd.cut(
-            data['smm'], 
+        urun_aggregated['urun_segment'] = pd.cut(
+            urun_aggregated['stok_satis_orani'], 
             bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
             include_lowest=True
         )
         
         # Mağaza segmentasyonu
-        store_smm = data.groupby('magaza_kod')['smm'].mean().reset_index()
         store_ranges = st.session_state.segmentation_params['store_ranges']
-        store_smm['magaza_segment'] = pd.cut(
-            store_smm['smm'],
+        magaza_aggregated['magaza_segment'] = pd.cut(
+            magaza_aggregated['stok_satis_orani'],
             bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
             labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
             include_lowest=True
         )
         
-        prod_segments = sorted([str(x) for x in data['urun_segment'].unique() if pd.notna(x)])
-        store_segments = sorted([str(x) for x in store_smm['magaza_segment'].unique() if pd.notna(x)])
+        prod_segments = sorted([str(x) for x in urun_aggregated['urun_segment'].unique() if pd.notna(x)])
+        store_segments = sorted([str(x) for x in magaza_aggregated['magaza_segment'].unique() if pd.notna(x)])
         
         # Sıralama tablosu oluştur
         st.subheader("🎯 Öncelik Sıralaması")
@@ -789,20 +870,35 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         "Sıralama": st.session_state.siralama_data
     }
     
-    missing_data = [name for name, data in required_data.items() if data is None]
+    # Haftalık trend opsiyonel
+    optional_data = {
+        "Haftalık Trend": st.session_state.haftalik_trend,
+        "Yasak Master": st.session_state.yasak_master
+    }    missing_data = [name for name, data in required_data.items() if data is None]
+    optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
-        st.warning("⚠️ Tüm adımları tamamlayın!")
+        st.warning("⚠️ Tüm zorunlu adımları tamamlayın!")
         st.error(f"**Eksik veriler:** {', '.join(missing_data)}")
         st.info("""
-        Tamamlanması gereken adımlar:
-        - ✅ Veri Yükleme (Tüm CSV'ler)
+        Tamamlanması gereken zorunlu adımlar:
+        - ✅ Veri Yükleme (Ürün Master, Mağaza Master, Depo Stok, Anlık Stok/Satış, KPI)
         - ✅ Segmentasyon Ayarları
         - ✅ Hedef Matris (Tüm 3 matris)
         - ✅ Sıralama Öncelikleri
+        
+        Opsiyonel veriler:
+        - Haftalık Trend (zorunlu değil)
+        - Yasak Master (zorunlu değil)
         """)
+        
+        if optional_loaded:
+            st.success(f"✅ Yüklenmiş opsiyonel veriler: {', '.join(optional_loaded)}")
     else:
-        st.success("✅ Tüm veriler hazır! Hesaplama yapılabilir.")
+        st.success("✅ Tüm zorunlu veriler hazır! Hesaplama yapılabilir.")
+        
+        if optional_loaded:
+            st.info(f"📌 Yüklenmiş opsiyonel veriler: {', '.join(optional_loaded)}")
         
         # Hesaplama özet bilgileri
         col1, col2, col3, col4 = st.columns(4)
@@ -814,8 +910,16 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         with col3:
             st.metric("Toplam Depo Stok", f"{st.session_state.depo_stok['stok'].sum():,.0f}")
         with col4:
-            st.metric("Yasak Kombinasyon", 
-                     len(st.session_state.yasak_master) if st.session_state.yasak_master is not None else 0)
+            yasak_count = len(st.session_state.yasak_master) if st.session_state.yasak_master is not None else 0
+            st.metric("Yasak Kombinasyon", yasak_count)
+        
+        # Depo-Mağaza eşleşme kontrolü
+        st.markdown("---")
+        st.subheader("🏢 Depo-Mağaza Eşleşmeleri")
+        
+        magaza_depo = st.session_state.magaza_master[['magaza_kod', 'magaza_ad', 'depo_kod']].copy()
+        st.dataframe(magaza_depo, use_container_width=True, height=200)
+        st.info("ℹ️ Her mağaza sadece kendi depo_kod'una atanmış depodan mal alabilir.")
         
         st.markdown("---")
         
@@ -823,17 +927,17 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         if st.button("🚀 Sevkiyat Hesapla", type="primary", use_container_width=True):
             with st.spinner("📊 Hesaplama yapılıyor... Bu işlem birkaç dakika sürebilir."):
                 
-                # Burada gerçek sevkiyat algoritması çalışacak
-                # Şimdilik basit bir örnek gösteriyoruz
-                
                 progress_bar = st.progress(0)
                 st.write("⏳ Adım 1/5: Segmentasyon yapılıyor...")
                 progress_bar.progress(20)
                 
-                st.write("⏳ Adım 2/5: Yasak kontrolleri yapılıyor...")
+                st.write("⏳ Adım 2/5: Depo-Mağaza eşleşmeleri kontrol ediliyor...")
                 progress_bar.progress(40)
                 
-                st.write("⏳ Adım 3/5: Stok hesaplamaları yapılıyor...")
+                if st.session_state.yasak_master is not None:
+                    st.write("⏳ Adım 3/5: Yasak kontrolleri yapılıyor...")
+                else:
+                    st.write("⏳ Adım 3/5: Yasak kontrolü atlandı (veri yok)...")
                 progress_bar.progress(60)
                 
                 st.write("⏳ Adım 4/5: Öncelik sıralaması uygulanıyor...")
@@ -853,6 +957,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 result_df = pd.DataFrame({
                     'magaza_kod': ['M001', 'M002', 'M003'],
                     'magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+                    'depo_kod': ['D001', 'D001', 'D002'],
                     'urun_kod': ['U001', 'U001', 'U002'],
                     'urun_ad': ['Ürün A', 'Ürün A', 'Ürün B'],
                     'mevcut_stok': [100, 150, 80],
@@ -878,7 +983,6 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     )
                 
                 with col2:
-                    # Excel export için (openpyxl gerekli)
                     st.download_button(
                         label="📥 Excel İndir",
                         data=result_df.to_csv(index=False, encoding='utf-8-sig'),
@@ -887,7 +991,6 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     )
                 
                 with col3:
-                    # JSON export
                     st.download_button(
                         label="📥 JSON İndir",
                         data=result_df.to_json(orient='records', force_ascii=False),
