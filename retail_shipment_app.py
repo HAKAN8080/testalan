@@ -1046,13 +1046,19 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write("⏳ Adım 4/6: İhtiyaç hesaplanıyor...")
                 progress_bar.progress(60)
                 
+                # Debug: Öncelik sıralaması kontrolü
+                st.write(f"🔍 Debug: Toplam kayıt sayısı: {len(anlik_df)}")
+                st.write(f"🔍 Debug: Öncelik bilgisi olan kayıt: {anlik_df['Oncelik'].notna().sum()}")
+                
                 # Öncelik sıralaması ekle
                 anlik_df = anlik_df.merge(
                     siralama_df,
-                    left_on=['magaza_segment', 'urun_segment'],
-                    right_on=['Magaza_Cluster', 'Urun_Cluster'],
+                    left_on=['magaza_segment', 'urun_segment', 'Durum'],
+                    right_on=['Magaza_Cluster', 'Urun_Cluster', 'Durum'],
                     how='left'
                 )
+                
+                st.write(f"🔍 Debug: Merge sonrası öncelik olan kayıt: {anlik_df['Oncelik'].notna().sum()}")
                 
                 # İhtiyaç hesapla
                 anlik_df['ihtiyac_rpt'] = (
@@ -1064,6 +1070,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     anlik_df['min_oran'] * anlik_df['min_deger']
                 ) - (anlik_df['stok'] + anlik_df['yol'])
                 
+                st.write(f"🔍 Debug: RPT ihtiyaç > 0: {(anlik_df['ihtiyac_rpt'] > 0).sum()}")
+                st.write(f"🔍 Debug: Min ihtiyaç > 0: {(anlik_df['ihtiyac_min'] > 0).sum()}")
+                
                 # Durum'a göre final ihtiyacı belirle
                 anlik_df['ihtiyac'] = anlik_df.apply(
                     lambda row: row['ihtiyac_rpt'] if row['Durum'] == 'RPT' else row['ihtiyac_min'],
@@ -1072,6 +1081,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 # Negatif ihtiyaçları 0 yap (min için: <=0 ise 0)
                 anlik_df['ihtiyac'] = anlik_df['ihtiyac'].clip(lower=0)
+                
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan kayıt: {(anlik_df['ihtiyac'] > 0).sum()}")
                 
                 # max_deger kontrolü - sevkiyat + stok + yol toplamı max_deger'i geçemesin
                 anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
@@ -1082,6 +1093,8 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     lambda row: min(row['ihtiyac'], row['max_sevkiyat']) if pd.notna(row['max_sevkiyat']) else row['ihtiyac'],
                     axis=1
                 )
+                
+                st.write(f"🔍 Debug: Max kontrol sonrası ihtiyaç > 0: {(anlik_df['ihtiyac'] > 0).sum()}")
                 
                 st.write("⏳ Adım 5/6: Yasak kontrolleri yapılıyor...")
                 progress_bar.progress(75)
