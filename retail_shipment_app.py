@@ -857,10 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -991,8 +988,11 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
                     anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
                     
+                    # mg'yi int'e çevir (float'tan gelebilir: 110101.0 -> 110101)
+                    urun_master['mg'] = urun_master['mg'].fillna(0).astype(float).astype(int).astype(str)
+                    
                     st.write(f"🔍 Debug: Ürün master kayıt sayısı: {len(urun_master)}")
-                    st.write(f"🔍 Debug: Ürün master örnek mg: {urun_master['mg'].head(3).tolist()}")
+                    st.write(f"🔍 Debug: Ürün master örnek mg (düzeltilmiş): {urun_master['mg'].head(3).tolist()}")
                     
                     anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
                     
@@ -1001,13 +1001,13 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     # KPI ile birleştir - min_deger için
                     kpi_data = kpi_df[['mg_id', 'min_deger', 'max_deger']].rename(columns={'mg_id': 'mg'})
                     
-                    st.write(f"🔍 Debug: KPI kayıt sayısı: {len(kpi_data)}")
-                    st.write(f"🔍 Debug: KPI mg değerleri: {kpi_data['mg'].tolist()}")
-                    st.write(f"🔍 Debug: KPI min_deger değerleri: {kpi_data['min_deger'].tolist()}")
-                    
-                    # mg veri tiplerini uyumlu hale getir
+                    # KPI mg'yi de string'e çevir
                     kpi_data['mg'] = kpi_data['mg'].astype(str)
                     anlik_df['mg'] = anlik_df['mg'].astype(str)
+                    
+                    st.write(f"🔍 Debug: KPI kayıt sayısı: {len(kpi_data)}")
+                    st.write(f"🔍 Debug: KPI örnek mg: {kpi_data['mg'].head(5).tolist()}")
+                    st.write(f"🔍 Debug: Anlik örnek mg: {anlik_df['mg'].head(5).tolist()}")
                     
                     anlik_df = anlik_df.merge(kpi_data, on='mg', how='left')
                     
