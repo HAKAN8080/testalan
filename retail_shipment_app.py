@@ -45,7 +45,7 @@ if 'siralama_data' not in st.session_state:
 # Sidebar menü
 st.sidebar.title("📦Sevk Sistemi")
 menu = st.sidebar.radio(
-    "Menü",
+    "",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
      "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama"]
 )
