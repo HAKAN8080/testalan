@@ -985,10 +985,20 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Ürün master'dan mg bilgisi al ve KPI ile birleştir
                 if st.session_state.urun_master is not None:
                     urun_master = st.session_state.urun_master[['urun_kod', 'mg']].copy()
+                    
+                    # Veri tiplerini uyumlu hale getir
+                    urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
+                    anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
+                    
                     anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
                     
                     # KPI ile birleştir - min_deger için
                     kpi_data = kpi_df[['mg_id', 'min_deger', 'max_deger']].rename(columns={'mg_id': 'mg'})
+                    
+                    # mg veri tiplerini uyumlu hale getir
+                    kpi_data['mg'] = kpi_data['mg'].astype(str)
+                    anlik_df['mg'] = anlik_df['mg'].astype(str)
+                    
                     anlik_df = anlik_df.merge(kpi_data, on='mg', how='left')
                     
                     # min_deger yoksa default 0
@@ -1049,9 +1059,10 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     default_fc * anlik_df['satis'] * anlik_df['genlestirme']
                 ) - (anlik_df['stok'] + anlik_df['yol'])
                 
-                # Min için: min_oran tutulmak istenen minimum adet
-                # İhtiyaç = min_oran - stok - yol
-                anlik_df['ihtiyac_min'] = anlik_df['min_oran'] - (anlik_df['stok'] + anlik_df['yol'])
+                # Min için: (min_oran * min_deger) - stok - yol
+                anlik_df['ihtiyac_min'] = (
+                    anlik_df['min_oran'] * anlik_df['min_deger']
+                ) - (anlik_df['stok'] + anlik_df['yol'])
                 
                 # Durum'a göre final ihtiyacı belirle
                 anlik_df['ihtiyac'] = anlik_df.apply(
@@ -1062,28 +1073,15 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Negatif ihtiyaçları 0 yap (min için: <=0 ise 0)
                 anlik_df['ihtiyac'] = anlik_df['ihtiyac'].clip(lower=0)
                 
-                # KPI'dan max_deger kontrolü - ürünün mg'sine göre
-                # Basitleştirme: Eğer KPI'da varsa kontrol et
-                # Ürün master'dan mg bilgisi al
-                if st.session_state.urun_master is not None:
-                    urun_master = st.session_state.urun_master[['urun_kod', 'mg']].copy()
-                    anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
-                    
-                    # KPI ile birleştir
-                    kpi_max = kpi_df[['mg_id', 'max_deger']].rename(columns={'mg_id': 'mg'})
-                    anlik_df = anlik_df.merge(kpi_max, on='mg', how='left')
-                    
-                    # max_deger varsa, sevkiyat + stok + yol toplamı max_deger'i geçemesin
-                    anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
-                    anlik_df['max_sevkiyat'] = anlik_df['max_sevkiyat'].clip(lower=0)
-                    
-                    # İhtiyacı max_sevkiyat ile sınırla
-                    anlik_df['ihtiyac'] = anlik_df.apply(
-                        lambda row: min(row['ihtiyac'], row['max_sevkiyat']) if pd.notna(row['max_sevkiyat']) else row['ihtiyac'],
-                        axis=1
-                    )
-                else:
-                    st.warning("⚠️ Ürün Master yüklenmediği için max_deger kontrolü yapılamadı")
+                # max_deger kontrolü - sevkiyat + stok + yol toplamı max_deger'i geçemesin
+                anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
+                anlik_df['max_sevkiyat'] = anlik_df['max_sevkiyat'].clip(lower=0)
+                
+                # İhtiyacı max_sevkiyat ile sınırla
+                anlik_df['ihtiyac'] = anlik_df.apply(
+                    lambda row: min(row['ihtiyac'], row['max_sevkiyat']) if pd.notna(row['max_sevkiyat']) else row['ihtiyac'],
+                    axis=1
+                )
                 
                 st.write("⏳ Adım 5/6: Yasak kontrolleri yapılıyor...")
                 progress_bar.progress(75)
