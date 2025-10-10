@@ -747,10 +747,7 @@ elif menu == "📊 Sıralama":
         st.info("""
         **RPT:** Satanı tamamlar
         **Min:** Stok seviyesi düşük olanları tamamlar
-        
-        Her kombinasyon için RPT ve Min öncelikleri sırayla oluşturulur.
-        Örnek: Mağaza 0-4, Ürün 0-4 → RPT:1, Min:2
-        """)
+         """)
         
         # Eğer daha önce kaydedilmişse onu kullan, yoksa tüm kombinasyonları oluştur
         if st.session_state.siralama_data is not None:
