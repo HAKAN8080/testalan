@@ -685,7 +685,7 @@ elif menu == "🎲 Hedef Matris":
         # Kaydet butonu
         col1, col2 = st.columns([1, 4])
         with col1:
-            if st.button("💾 Tüm Matrisleri Kaydet", type="primary"):
+            if st.button("💾 Matrisleri Kaydet", type="primary"):
                 st.session_state.sisme_orani = edited_sisme
                 st.session_state.genlestirme_orani = edited_genlestirme
                 st.session_state.min_oran = edited_min_oran
