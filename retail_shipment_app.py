@@ -43,10 +43,10 @@ if 'siralama_data' not in st.session_state:
     st.session_state.siralama_data = None
 
 # Sidebar menü
-st.sidebar.title("📦Sevk Sistemi")
+st.sidebar.title("📦 Sevkiyat Planlama")
 menu = st.sidebar.radio(
-    "",
-    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
+    "Menü",
+    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon Ayarları", 
      "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama"]
 )
 
@@ -224,16 +224,14 @@ elif menu == "📤 Veri Yükleme":
                     st.session_state.urun_master = df
                     st.success(f"✅ {len(df)} ürün yüklendi!")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.urun_master is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.urun_master.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.urun_master.head(10), use_container_width=True, height=400)
     
     # 2. MAĞAZA MASTER
     with tab2:
@@ -251,16 +249,14 @@ elif menu == "📤 Veri Yükleme":
                     st.session_state.magaza_master = df
                     st.success(f"✅ {len(df)} mağaza yüklendi!")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.magaza_master is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.magaza_master.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.magaza_master.head(10), use_container_width=True, height=400)
     
     # 3. YASAK
     with tab3:
@@ -278,16 +274,14 @@ elif menu == "📤 Veri Yükleme":
                     st.session_state.yasak_master = df
                     st.success(f"✅ {len(df)} yasak kaydı yüklendi!")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.yasak_master is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.yasak_master.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.yasak_master.head(10), use_container_width=True, height=400)
     
     # 4. DEPO STOK
     with tab4:
@@ -305,16 +299,14 @@ elif menu == "📤 Veri Yükleme":
                     st.session_state.depo_stok = df
                     st.success(f"✅ {len(df)} depo stok kaydı yüklendi!")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.depo_stok is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.depo_stok.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.depo_stok.head(10), use_container_width=True, height=400)
     
     # 5. ANLIK STOK SATIŞ
     with tab5:
@@ -342,16 +334,14 @@ elif menu == "📤 Veri Yükleme":
                     with col3:
                         st.metric("Ortalama SMM", f"{df['smm'].mean():.2f}")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.anlik_stok_satis is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.anlik_stok_satis.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.anlik_stok_satis.head(10), use_container_width=True, height=400)
     
     # 6. HAFTALIK TREND
     with tab6:
@@ -370,16 +360,14 @@ elif menu == "📤 Veri Yükleme":
                     st.session_state.haftalik_trend = df
                     st.success(f"✅ {len(df)} haftalık veri yüklendi!")
                     
-                    # Sadece ilk 10 satırı göster
-                    st.write("**İlk 10 Kayıt (Önizleme)**")
-                    st.dataframe(df.head(10), use_container_width=True, height=300)
+                    # İlk 10 satırı tam ekran göster
+                    st.dataframe(df.head(10), use_container_width=True, height=400)
                 else:
                     st.error(f"❌ Eksik sütunlar var!")
             except Exception as e:
                 st.error(f"❌ Hata: {str(e)}")
         elif st.session_state.haftalik_trend is not None:
-            st.write("**İlk 10 Kayıt (Önizleme)**")
-            st.dataframe(st.session_state.haftalik_trend.head(10), use_container_width=True, height=300)
+            st.dataframe(st.session_state.haftalik_trend.head(10), use_container_width=True, height=400)
     
     # 7. KPI
     with tab7:
@@ -685,7 +673,7 @@ elif menu == "🎲 Hedef Matris":
         # Kaydet butonu
         col1, col2 = st.columns([1, 4])
         with col1:
-            if st.button("💾 Matrisleri Kaydet", type="primary"):
+            if st.button("💾 Tüm Matrisleri Kaydet", type="primary"):
                 st.session_state.sisme_orani = edited_sisme
                 st.session_state.genlestirme_orani = edited_genlestirme
                 st.session_state.min_oran = edited_min_oran
@@ -745,9 +733,12 @@ elif menu == "📊 Sıralama":
         st.subheader("🎯 Öncelik Sıralaması")
         
         st.info("""
-        **RPT:** Satanı tamamlar
-        **Min:** Stok seviyesi düşük olanları tamamlar
-         """)
+        **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
+        **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
+        
+        Her kombinasyon için RPT ve Min öncelikleri sırayla oluşturulur.
+        Örnek: Mağaza 0-4, Ürün 0-4 → RPT:1, Min:2
+        """)
         
         # Eğer daha önce kaydedilmişse onu kullan, yoksa tüm kombinasyonları oluştur
         if st.session_state.siralama_data is not None:
@@ -835,7 +826,7 @@ elif menu == "📊 Sıralama":
         # Kaydet
         col1, col2 = st.columns([1, 4])
         with col1:
-            if st.button("💾 Kaydet", type="primary"):
+            if st.button("💾 Sıralamayı Kaydet", type="primary"):
                 st.session_state.siralama_data = edited_siralama
                 st.success("✅ Sıralama öncelikleri kaydedildi!")
         
