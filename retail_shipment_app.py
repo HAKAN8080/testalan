@@ -1051,6 +1051,19 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write(f"🔍 Debug: Benzersiz mağaza segment: {anlik_df['magaza_segment'].nunique()}")
                 st.write(f"🔍 Debug: Benzersiz ürün segment: {anlik_df['urun_segment'].nunique()}")
                 
+                # RPT ve Min için ayrı satırlar oluştur
+                # Her kayıt için hem RPT hem Min hesaplanacak
+                anlik_rpt = anlik_df.copy()
+                anlik_rpt['Durum'] = 'RPT'
+                
+                anlik_min = anlik_df.copy()
+                anlik_min['Durum'] = 'Min'
+                
+                # İki dataframe'i birleştir
+                anlik_df = pd.concat([anlik_rpt, anlik_min], ignore_index=True)
+                
+                st.write(f"🔍 Debug: RPT+Min birleştirme sonrası kayıt: {len(anlik_df)}")
+                
                 # Öncelik sıralaması ekle
                 st.write(f"🔍 Debug: Sıralama tablosu satır sayısı: {len(siralama_df)}")
                 
