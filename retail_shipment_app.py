@@ -125,7 +125,7 @@ elif menu == "📤 Veri Yükleme":
         }),
         'magaza_master.csv': pd.DataFrame({
             'Magaza_Kod': ['M001', 'M002', 'M003'],
-            'Mağaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
+            'Magaza_ad': ['Mağaza A', 'Mağaza B', 'Mağaza C'],
             'il': ['İstanbul', 'Ankara', 'İzmir'],
             'bolge': ['Marmara', 'İç Anadolu', 'Ege'],
             'tip': ['Hipermarket', 'Süpermarket', 'Hipermarket'],
@@ -137,7 +137,7 @@ elif menu == "📤 Veri Yükleme":
             'urun_kod': ['U001', 'U002'],
             'urun_ad': ['Ürün A', 'Ürün B'],
             'Magaza_Kod': ['M002', 'M001'],
-            'Mağaza_ad': ['Mağaza B', 'Mağaza A'],
+            'Magaza_ad': ['Mağaza B', 'Mağaza A'],
             'yasak_durum': ['Yasak', 'Yasak']
         }),
         'depo_stok.csv': pd.DataFrame({
@@ -246,14 +246,14 @@ elif menu == "📤 Veri Yükleme":
     # 2. MAĞAZA MASTER
     with tab2:
         st.subheader("🏪 Mağaza Master")
-        st.info("Kolonlar: Magaza_Kod, Mağaza_ad, il, bolge, tip, adres_kod, sm, bs")
+        st.info("Kolonlar: Magaza_Kod, Magaza_ad, il, bolge, tip, adres_kod, sm, bs")
         
         uploaded = st.file_uploader("Mağaza Master CSV yükle", type=['csv'], key="magaza_master_upload")
         
         if uploaded:
             try:
                 df = pd.read_csv(uploaded)
-                required_cols = ['Magaza_Kod', 'Mağaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs']
+                required_cols = ['Magaza_Kod', 'Magaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs']
                 
                 if all(col in df.columns for col in required_cols):
                     st.session_state.magaza_master = df
@@ -278,14 +278,14 @@ elif menu == "📤 Veri Yükleme":
     # 3. YASAK
     with tab3:
         st.subheader("🚫 Yasak Master")
-        st.info("Kolonlar: urun_kod, urun_ad, Magaza_Kod, Mağaza_ad, yasak_durum")
+        st.info("Kolonlar: urun_kod, urun_ad, Magaza_Kod, Magaza_ad, yasak_durum")
         
         uploaded = st.file_uploader("Yasak CSV yükle", type=['csv'], key="yasak_upload")
         
         if uploaded:
             try:
                 df = pd.read_csv(uploaded)
-                required_cols = ['urun_kod', 'urun_ad', 'Magaza_Kod', 'Mağaza_ad', 'yasak_durum']
+                required_cols = ['urun_kod', 'urun_ad', 'Magaza_Kod', 'Magaza_ad', 'yasak_durum']
                 
                 if all(col in df.columns for col in required_cols):
                     st.session_state.yasak_master = df
