@@ -819,8 +819,8 @@ elif menu == "📊 Sıralama":
                 ),
                 "Durum": st.column_config.SelectboxColumn(
                     "Durum",
-                    help="RPT (Hızlı sevkiyat) veya Min (Minimum stok)",
-                    options=["RPT", "Min"],
+                    help="RPT (Hızlı sevkiyat), Initial (Yeni ürün) veya Min (Minimum stok)",
+                    options=["RPT", "Initial", "Min"],
                     required=True
                 ),
                 "Oncelik": st.column_config.NumberColumn(
@@ -1282,7 +1282,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write(f"🔍 Debug: Min sayısı: {(result_df_max['Durum'] == 'Min').sum()}")
                 
                 # Önceliğe göre sırala
-                result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)Debug: Maksimum alındıktan sonra: {len(result_df_max)}")
+                result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)
                 st.write(f"🔍 Debug: RPT sayısı: {(result_df_max['Durum'] == 'RPT').sum()}")
                 st.write(f"🔍 Debug: Min sayısı: {(result_df_max['Durum'] == 'Min').sum()}")
                 st.write(f"🔍 Debug: Initial sayısı: {(result_df_max['Durum'] == 'Initial').sum()}")
