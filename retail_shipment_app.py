@@ -51,7 +51,7 @@ st.sidebar.title("📦 Sevkiyat Planlama")
 menu = st.sidebar.radio(
     "Menü",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon Ayarları", 
-     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama", "🆕 Yeni Ürün Sevkiyatı", "📈 Raporlar"]
+     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama", "📈 Raporlar"]
 )
 
 # ============================================
@@ -1479,168 +1479,6 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     )
 
 # ============================================
-# 🆕 YENİ ÜRÜN SEVKİYATI
-# ============================================
-elif menu == "🆕 Yeni Ürün Sevkiyatı":
-    st.title("🆕 Yeni Ürün Sevkiyatı (Initial Distribution)")
-    st.markdown("---")
-    
-    # Veri kontrolü
-    if (st.session_state.anlik_stok_satis is None or 
-        st.session_state.magaza_master is None or 
-        st.session_state.depo_stok is None):
-        st.warning("⚠️ Gerekli veriler yüklenmemiş!")
-        st.info("Lütfen önce: Anlık Stok/Satış, Mağaza Master ve Depo Stok verilerini yükleyin.")
-    else:
-        st.info("""
-        **Yeni Ürün Kriterleri:**
-        1. **Depo stoğu > 500** (Depoya yeni gelmiş, henüz dağıtılmamış)
-        2. **Stok + yol > 1 olan mağaza sayısı < %30** (Az sayıda mağazaya dağıtılmış)
-        3. **Yasak olmayan mağazalar** (Yasak mağazalar hesaba katılmaz)
-        
-        Bu kriterleri sağlayan ürünler "Initial" olarak işaretlenir ve öncelikli dağıtılır.
-        """)
-        
-        if st.button("🔍 Yeni Ürünleri Tespit Et", type="primary"):
-            with st.spinner("🔍 Yeni ürünler tespit ediliyor..."):
-                
-                anlik_df = st.session_state.anlik_stok_satis.copy()
-                magaza_df = st.session_state.magaza_master.copy()
-                depo_df = st.session_state.depo_stok.copy()
-                
-                # Yasak kontrolü
-                if st.session_state.yasak_master is not None:
-                    yasak_df = st.session_state.yasak_master.copy()
-                    yasak_df['urun_kod'] = yasak_df['urun_kod'].astype(str)
-                    yasak_df['magaza_kod'] = yasak_df['magaza_kod'].astype(str)
-                    
-                    # Yasak kombinasyonları işaretle
-                    anlik_df['urun_kod_str'] = anlik_df['urun_kod'].astype(str)
-                    anlik_df['magaza_kod_str'] = anlik_df['magaza_kod'].astype(str)
-                    
-                    anlik_df = anlik_df.merge(
-                        yasak_df[['urun_kod', 'magaza_kod', 'yasak_durum']],
-                        left_on=['urun_kod_str', 'magaza_kod_str'],
-                        right_on=['urun_kod', 'magaza_kod'],
-                        how='left',
-                        suffixes=('', '_yasak')
-                    )
-                    
-                    # Yasak olanları filtrele
-                    anlik_df_temiz = anlik_df[anlik_df['yasak_durum'] != 'Yasak'].copy()
-                    
-                    st.write(f"📊 Yasak filtresi: {len(anlik_df)} → {len(anlik_df_temiz)} kayıt")
-                else:
-                    anlik_df_temiz = anlik_df.copy()
-                
-                # Yasak olmayan toplam benzersiz mağaza sayısı
-                toplam_magaza = anlik_df_temiz['magaza_kod'].nunique()
-                esik_magaza = int(toplam_magaza * 0.30)
-                
-                st.write(f"📊 Yasak olmayan toplam mağaza: {toplam_magaza}")
-                st.write(f"📊 %30 eşik değeri: {esik_magaza} mağaza")
-                
-                # Önce depo stoğu > 500 olan ürünleri filtrele
-                # Veri tipi düzeltme
-                depo_df['urun_kod'] = depo_df['urun_kod'].astype(str)
-                depo_df['urun_kod'] = depo_df['urun_kod'].apply(
-                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                )
-                
-                # Depo stok toplamı
-                depo_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
-                depo_toplam.columns = ['urun_kod', 'depo_stok_toplam']
-                
-                # Kriter 1: Depo stoğu > 500 (yeni gelmiş ürünler)
-                yeni_urun_adaylari = depo_toplam[depo_toplam['depo_stok_toplam'] > 500]['urun_kod'].tolist()
-                
-                st.write(f"🔍 Depo stok > 500 olan ürün: {len(yeni_urun_adaylari)}")
-                
-                # Bu ürünler için mağaza dağılımına bak
-                anlik_df_temiz['urun_kod'] = anlik_df_temiz['urun_kod'].astype(str)
-                yeni_urun_df = anlik_df_temiz[anlik_df_temiz['urun_kod'].isin(yeni_urun_adaylari)].copy()
-                
-                # Stok + yol > 1 olanlar (girmiş sayılır)
-                yeni_urun_df['toplam_eldeki'] = yeni_urun_df['stok'] + yeni_urun_df['yol']
-                urun_stoklu = yeni_urun_df[yeni_urun_df['toplam_eldeki'] > 1].groupby('urun_kod')['magaza_kod'].nunique().reset_index()
-                urun_stoklu.columns = ['urun_kod', 'stoklu_magaza_sayisi']
-                
-                # Depo stok bilgisi ile birleştir
-                urun_analiz = urun_stoklu.merge(depo_toplam, on='urun_kod', how='left')
-                
-                # Kriter 2: %30'dan az mağazaya dağıtılmış (veya hiç dağıtılmamış)
-                yeni_urunler = urun_analiz[
-                    (urun_analiz['stoklu_magaza_sayisi'] < esik_magaza) &
-                    (urun_analiz['depo_stok_toplam'] > 500)
-                ].copy()
-                
-                st.write(f"✅ Her iki kriteri sağlayan ürün: {len(yeni_urunler)}")
-                
-                if len(yeni_urunler) > 0:
-                    # Ürün bilgilerini ekle
-                    if st.session_state.urun_master is not None:
-                        urun_master = st.session_state.urun_master[['urun_kod', 'urun_ad', 'marka_ad']].copy()
-                        urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
-                        urun_master['urun_kod'] = urun_master['urun_kod'].apply(
-                            lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                        )
-                        yeni_urunler = yeni_urunler.merge(urun_master, on='urun_kod', how='left')
-                    
-                    # Yüzde hesapla
-                    yeni_urunler['dagilim_orani'] = (yeni_urunler['stoklu_magaza_sayisi'] / toplam_magaza * 100).round(2)
-                    
-                    # Sırala
-                    yeni_urunler = yeni_urunler.sort_values('depo_stok_toplam', ascending=False)
-                    
-                    # Session state'e kaydet
-                    st.session_state.yeni_urun_listesi = yeni_urunler
-                    
-                    st.success(f"✅ {len(yeni_urunler)} yeni ürün tespit edildi!")
-                    
-                    # Özet metrikler
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("Yeni Ürün Sayısı", len(yeni_urunler))
-                    with col2:
-                        st.metric("Toplam Depo Stok", f"{yeni_urunler['depo_stok_toplam'].sum():,.0f}")
-                    with col3:
-                        ortalama_dagilim = yeni_urunler['dagilim_orani'].mean()
-                        st.metric("Ortalama Dağılım", f"{ortalama_dagilim:.1f}%")
-                    
-                    st.markdown("---")
-                    
-                    # Tablo göster
-                    st.subheader("📋 Tespit Edilen Yeni Ürünler")
-                    
-                    display_cols = ['urun_kod', 'urun_ad', 'marka_ad', 'stoklu_magaza_sayisi', 
-                                   'dagilim_orani', 'depo_stok_toplam']
-                    
-                    if 'urun_ad' not in yeni_urunler.columns:
-                        display_cols = [c for c in display_cols if c in yeni_urunler.columns]
-                    
-                    st.dataframe(yeni_urunler[display_cols], use_container_width=True, height=400)
-                    
-                    # İndir
-                    st.download_button(
-                        label="📥 Yeni Ürün Listesi İndir (CSV)",
-                        data=yeni_urunler.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="yeni_urun_listesi.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.info("ℹ️ Kriterleri sağlayan yeni ürün bulunamadı.")
-        
-        # Eğer liste varsa göster
-        if st.session_state.yeni_urun_listesi is not None:
-            st.markdown("---")
-            st.subheader("💾 Kayıtlı Yeni Ürün Listesi")
-            st.info(f"Son tespit: {len(st.session_state.yeni_urun_listesi)} ürün")
-            
-            if st.button("🗑️ Listeyi Temizle"):
-                st.session_state.yeni_urun_listesi = None
-                st.rerun()
-
-# ============================================
 # 📈 RAPORLAR
 # ============================================
 elif menu == "📈 Raporlar":
@@ -1904,14 +1742,17 @@ elif menu == "📈 Raporlar":
             st.subheader("🆕 Yeni Ürün Dağılım Raporu")
             
             # Yeni ürün listesi var mı kontrol et
-            if st.session_state.yeni_urun_listesi is None:
-                st.warning("⚠️ Henüz yeni ürün tespiti yapılmadı!")
-                st.info("Lütfen önce 'Yeni Ürün Sevkiyatı' menüsünden yeni ürünleri tespit edin.")
+            if st.session_state.yeni_urun_listesi is None or len(st.session_state.yeni_urun_listesi) == 0:
+                st.info("ℹ️ Bu sevkiyatta yeni ürün tespit edilmedi (Depo stok > 500 ve mağaza dağılımı < %30 kriteri).")
             else:
                 yeni_urun_kodlari = st.session_state.yeni_urun_listesi['urun_kod'].astype(str).tolist()
                 
                 # Sadece Initial (yeni ürün) sevkiyatlarını filtrele
                 initial_df = result_df[result_df['durum'] == 'Initial'].copy()
+                
+                st.write(f"🔍 Debug: Toplam result_df kayıt: {len(result_df)}")
+                st.write(f"🔍 Debug: Initial filtre sonrası: {len(initial_df)}")
+                st.write(f"🔍 Debug: Result_df'deki benzersiz durum değerleri: {result_df['durum'].unique().tolist()}")
                 
                 if len(initial_df) > 0:
                     st.success(f"✅ {len(yeni_urun_kodlari)} yeni ürün için sevkiyat yapıldı!")
