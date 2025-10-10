@@ -799,6 +799,14 @@ elif menu == "📊 Sıralama":
         st.markdown("---")
         st.subheader("📋 Tüm Kombinasyonlar (Elle Düzenlenebilir)")
         
+        # Reset butonu ekle
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("🔄 Tabloyu Sıfırla (Initial Ekle)", type="secondary"):
+                st.session_state.siralama_data = None
+                st.success("✅ Sıralama tablosu sıfırlandı! Sayfa yenileniyor...")
+                st.rerun()
+        
         # Düzenlenebilir tablo - Tüm kombinasyonlar
         edited_siralama = st.data_editor(
             siralama_df.sort_values('Oncelik').reset_index(drop=True),
@@ -1157,9 +1165,15 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     anlik_df = pd.concat([anlik_rpt, anlik_min], ignore_index=True)
                 
                 st.write(f"🔍 Debug: RPT+Min birleştirme sonrası kayıt: {len(anlik_df)}")
+                st.write(f"🔍 Debug: Durum dağılımı: {anlik_df['Durum'].value_counts().to_dict()}")
                 
                 # Öncelik sıralaması ekle
                 st.write(f"🔍 Debug: Sıralama tablosu satır sayısı: {len(siralama_df)}")
+                st.write(f"🔍 Debug: Sıralama tablosundaki Durum değerleri: {siralama_df['Durum'].unique().tolist()}")
+                
+                # Merge öncesi unique segment-durum kombinasyonları
+                anlik_unique = anlik_df[['magaza_segment', 'urun_segment', 'Durum']].drop_duplicates()
+                st.write(f"🔍 Debug: Anlik_df'deki benzersiz segment-durum kombinasyonu: {len(anlik_unique)}")
                 
                 anlik_df = anlik_df.merge(
                     siralama_df,
@@ -1169,7 +1183,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 )
                 
                 st.write(f"🔍 Debug: Merge sonrası kayıt sayısı: {len(anlik_df)}")
+                st.write(f"🔍 Debug: Merge sonrası Durum dağılımı: {anlik_df['Durum'].value_counts().to_dict()}")
                 st.write(f"🔍 Debug: Merge sonrası öncelik olan kayıt: {anlik_df['Oncelik'].notna().sum()}")
+                st.write(f"🔍 Debug: Merge sonrası öncelik NULL olan kayıt: {anlik_df['Oncelik'].isna().sum()}")
                 
                 # İhtiyaç hesapla
                 anlik_df['ihtiyac_rpt'] = (
