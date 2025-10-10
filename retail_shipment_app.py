@@ -1261,10 +1261,16 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 result_df['sevkiyat_gercek'] = sevkiyat_gercek
                 
-                # Sadece gerçek sevkiyatı > 0 olanları al
-                result_df = result_df[result_df['sevkiyat_gercek'] > 0].copy()
+                # Stok yokluğu kaybını hesapla
+                result_df['stok_yoklugu_kaybi'] = result_df['ihtiyac'] - result_df['sevkiyat_gercek']
                 
-                st.write(f"🔍 Debug: Depo stok kontrolü sonrası kayıt: {len(result_df)}")
+                # ÖNEMLİ: Sadece sevkiyat > 0 olanları DEĞİL, ihtiyaç > 0 olanların HEPSİNİ al
+                # Böylece stok olmayan ama ihtiyaç olan kayıtlar da rapora girer
+                result_df = result_df[result_df['ihtiyac'] > 0].copy()
+                
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan tüm kayıtlar (sevkiyat=0 dahil): {len(result_df)}")
+                st.write(f"🔍 Debug: Sevkiyat > 0 olan kayıt: {(result_df['sevkiyat_gercek'] > 0).sum()}")
+                st.write(f"🔍 Debug: Sevkiyat = 0 olan kayıt: {(result_df['sevkiyat_gercek'] == 0).sum()}")
                 
                 # Sonuç tablosunu oluştur
                 result_final = result_df[[
