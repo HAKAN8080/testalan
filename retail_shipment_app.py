@@ -850,9 +850,6 @@ elif menu == "📊 Sıralama":
                 st.success("✅ Varsayılan değerlere sıfırlandı!")
                 st.rerun()
 
-# ============================================
-# 🚚 SEVKİYAT HESAPLAMA
-# ============================================
 elif menu == "🚚 Sevkiyat Hesaplama":
     st.title("🚚 Sevkiyat Hesaplama")
     st.markdown("---")
