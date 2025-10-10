@@ -857,9 +857,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
@@ -978,9 +976,26 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 anlik_df['urun_segment'] = anlik_df['urun_segment'].astype(str)
                 anlik_df['magaza_segment'] = anlik_df['magaza_segment'].astype(str)
                 
-                # KPI'dan forward_cover al (mg bazında)
+                # KPI'dan forward_cover ve min_deger al (mg bazında)
                 # Basitleştirme: Ortalama forward_cover kullan
                 default_fc = kpi_df['forward_cover'].mean()
+                
+                # Ürün master'dan mg bilgisi al ve KPI ile birleştir
+                if st.session_state.urun_master is not None:
+                    urun_master = st.session_state.urun_master[['urun_kod', 'mg']].copy()
+                    anlik_df = anlik_df.merge(urun_master, on='urun_kod', how='left')
+                    
+                    # KPI ile birleştir - min_deger için
+                    kpi_data = kpi_df[['mg_id', 'min_deger', 'max_deger']].rename(columns={'mg_id': 'mg'})
+                    anlik_df = anlik_df.merge(kpi_data, on='mg', how='left')
+                    
+                    # min_deger yoksa default 0
+                    anlik_df['min_deger'] = anlik_df['min_deger'].fillna(0)
+                    anlik_df['max_deger'] = anlik_df['max_deger'].fillna(999999)
+                else:
+                    st.warning("⚠️ Ürün Master yüklenmediği için KPI min/max değerleri kullanılamadı")
+                    anlik_df['min_deger'] = 0
+                    anlik_df['max_deger'] = 999999
                 
                 st.write("⏳ Adım 3/6: Matris değerleri getiriliyor...")
                 progress_bar.progress(45)
