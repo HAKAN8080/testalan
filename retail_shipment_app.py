@@ -751,24 +751,21 @@ elif menu == "📊 Sıralama":
         st.info("""
         **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
         **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
-        """)
         
-        # Tüm kombinasyonlar için satırlar oluştur
-        siralama_rows = []
-        for store_seg in store_segments:
-            for prod_seg in prod_segments:
-                siralama_rows.append({
-                    'Magaza_Cluster': store_seg,
-                    'Urun_Cluster': prod_seg,
-                    'Durum': 'RPT',  # Default değer
-                    'Oncelik': 1  # Default öncelik
-                })
+        Örnek: 0-4 | 0-4 | RPT | 1
+        """)
         
         # Eğer daha önce kaydedilmişse onu kullan
         if st.session_state.siralama_data is not None:
             siralama_df = st.session_state.siralama_data
         else:
-            siralama_df = pd.DataFrame(siralama_rows)
+            # Boş tablo ile başla - kullanıcı manuel ekleyecek
+            siralama_df = pd.DataFrame({
+                'Magaza_Cluster': ['0-4', '0-4', '5-8'],
+                'Urun_Cluster': ['0-4', '5-8', '0-4'],
+                'Durum': ['RPT', 'Min', 'RPT'],
+                'Oncelik': [1, 2, 3]
+            })
         
         # Düzenlenebilir tablo
         edited_siralama = st.data_editor(
@@ -776,15 +773,17 @@ elif menu == "📊 Sıralama":
             use_container_width=True,
             num_rows="dynamic",
             column_config={
-                "Magaza_Cluster": st.column_config.TextColumn(
+                "Magaza_Cluster": st.column_config.SelectboxColumn(
                     "Mağaza Cluster",
-                    help="Mağaza segmenti",
-                    disabled=False
+                    help="Mağaza segmenti seçin",
+                    options=store_segments,
+                    required=True
                 ),
-                "Urun_Cluster": st.column_config.TextColumn(
+                "Urun_Cluster": st.column_config.SelectboxColumn(
                     "Ürün Cluster",
-                    help="Ürün segmenti",
-                    disabled=False
+                    help="Ürün segmenti seçin",
+                    options=prod_segments,
+                    required=True
                 ),
                 "Durum": st.column_config.SelectboxColumn(
                     "Durum",
@@ -804,30 +803,18 @@ elif menu == "📊 Sıralama":
             hide_index=True
         )
         
-        # Önizleme
+        # Önizleme - Tek tablo olarak önceliğe göre sıralı
         st.markdown("---")
-        st.subheader("📋 Sıralama Önizleme")
+        st.subheader("📋 Sıralama Önizleme (Önceliğe Göre)")
         
         # Sıralamaya göre önizleme
-        preview_df = edited_siralama.sort_values('Oncelik')
+        preview_df = edited_siralama.sort_values('Oncelik').reset_index(drop=True)
         
-        # RPT ve Min ayrı ayrı göster
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**RPT Öncelikleri**")
-            rpt_df = preview_df[preview_df['Durum'] == 'RPT'].copy()
-            if len(rpt_df) > 0:
-                st.dataframe(rpt_df, use_container_width=True, height=300)
-            else:
-                st.info("RPT önceliği yok")
+        # Öncelik numarasını göster
+        preview_display = preview_df.copy()
+        preview_display.index = preview_display.index + 1  # Index 1'den başlasın
         
-        with col2:
-            st.write("**Min Öncelikleri**")
-            min_df = preview_df[preview_df['Durum'] == 'Min'].copy()
-            if len(min_df) > 0:
-                st.dataframe(min_df, use_container_width=True, height=300)
-            else:
-                st.info("Min önceliği yok")
+        st.dataframe(preview_display, use_container_width=True, height=400)
         
         # Kaydet
         col1, col2 = st.columns([1, 4])
@@ -863,9 +850,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
