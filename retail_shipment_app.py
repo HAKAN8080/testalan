@@ -748,22 +748,33 @@ elif menu == "📊 Sıralama":
         **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
         **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
         
-        Tüm mağaza-ürün kombinasyonları otomatik oluşturulmuştur. Durum ve öncelik değerlerini düzenleyebilirsiniz.
+        Her kombinasyon için RPT ve Min öncelikleri sırayla oluşturulur.
+        Örnek: Mağaza 0-4, Ürün 0-4 → RPT:1, Min:2
         """)
         
         # Eğer daha önce kaydedilmişse onu kullan, yoksa tüm kombinasyonları oluştur
         if st.session_state.siralama_data is not None:
             siralama_df = st.session_state.siralama_data
         else:
-            # Tüm kombinasyonları oluştur
+            # Tüm kombinasyonları oluştur - Her kombinasyon için RPT ve Min
             siralama_rows = []
             oncelik_counter = 1
             for store_seg in store_segments:
                 for prod_seg in prod_segments:
+                    # RPT
                     siralama_rows.append({
                         'Magaza_Cluster': store_seg,
                         'Urun_Cluster': prod_seg,
-                        'Durum': 'RPT',  # Default değer
+                        'Durum': 'RPT',
+                        'Oncelik': oncelik_counter
+                    })
+                    oncelik_counter += 1
+                    
+                    # Min
+                    siralama_rows.append({
+                        'Magaza_Cluster': store_seg,
+                        'Urun_Cluster': prod_seg,
+                        'Durum': 'Min',
                         'Oncelik': oncelik_counter
                     })
                     oncelik_counter += 1
@@ -793,7 +804,7 @@ elif menu == "📊 Sıralama":
                 ),
                 "Durum": st.column_config.SelectboxColumn(
                     "Durum",
-                    help="RPT (Hızlı sevkiyat) veya Min (Minimum stok) seçin",
+                    help="RPT (Hızlı sevkiyat) veya Min (Minimum stok)",
                     options=["RPT", "Min"],
                     required=True
                 ),
