@@ -41,13 +41,15 @@ if 'min_oran' not in st.session_state:
     st.session_state.min_oran = None
 if 'siralama_data' not in st.session_state:
     st.session_state.siralama_data = None
+if 'sevkiyat_sonuc' not in st.session_state:
+    st.session_state.sevkiyat_sonuc = None
 
 # Sidebar menü
 st.sidebar.title("📦 Sevkiyat Planlama")
 menu = st.sidebar.radio(
     "Menü",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon Ayarları", 
-     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama"]
+     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama", "📈 Raporlar"]
 )
 
 # ============================================
@@ -1290,6 +1292,9 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 # Sıra numarası ekle
                 result_final.insert(0, 'sira_no', range(1, len(result_final) + 1))
                 
+                # Sonucu session state'e kaydet (raporlar için)
+                st.session_state.sevkiyat_sonuc = result_final
+                
                 progress_bar.progress(100)
                 
                 st.success("✅ Hesaplama tamamlandı!")
@@ -1374,3 +1379,259 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                         file_name="sevkiyat_sonuclari.json",
                         mime="application/json"
                     )
+
+# ============================================
+# 📈 RAPORLAR
+# ============================================
+elif menu == "📈 Raporlar":
+    st.title("📈 Raporlar ve Analizler")
+    st.markdown("---")
+    
+    # Sevkiyat sonucu var mı kontrol et
+    if st.session_state.sevkiyat_sonuc is None:
+        st.warning("⚠️ Henüz sevkiyat hesaplaması yapılmadı!")
+        st.info("Lütfen önce 'Sevkiyat Hesaplama' menüsünden hesaplama yapın.")
+    else:
+        result_df = st.session_state.sevkiyat_sonuc.copy()
+        
+        # Tab'lar oluştur
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "🏷️ Marka Analizi",
+            "📦 Mal Grubu Analizi", 
+            "🏪 Mağaza Analizi",
+            "⚠️ Satış Kaybı Analizi"
+        ])
+        
+        # ============================================
+        # MARKA ANALİZİ
+        # ============================================
+        with tab1:
+            st.subheader("🏷️ Marka Bazında Analiz")
+            
+            # Ürün master ile birleştir (marka bilgisi için)
+            if st.session_state.urun_master is not None:
+                urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad']].copy()
+                urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
+                
+                # Float string düzelt
+                urun_marka['urun_kod'] = urun_marka['urun_kod'].apply(
+                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                )
+                
+                result_marka = result_df.merge(urun_marka, on='urun_kod', how='left')
+                
+                # Marka bazında özet
+                marka_ozet = result_marka.groupby('marka_ad').agg({
+                    'ihtiyac_miktari': 'sum',
+                    'sevkiyat_miktari': 'sum',
+                    'stok_yoklugu_satis_kaybi': 'sum',
+                    'magaza_kod': 'nunique',
+                    'urun_kod': 'nunique'
+                }).reset_index()
+                
+                marka_ozet.columns = ['Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
+                                      'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
+                
+                # Gerçekleşme oranı hesapla
+                marka_ozet['Gerçekleşme %'] = (
+                    marka_ozet['Toplam Sevkiyat'] / marka_ozet['Toplam İhtiyaç'] * 100
+                ).round(2)
+                
+                # Sırala
+                marka_ozet = marka_ozet.sort_values('Toplam İhtiyaç', ascending=False)
+                
+                # Özet metrikler
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Toplam Marka", len(marka_ozet))
+                with col2:
+                    st.metric("Toplam İhtiyaç", f"{marka_ozet['Toplam İhtiyaç'].sum():,.0f}")
+                with col3:
+                    st.metric("Toplam Sevkiyat", f"{marka_ozet['Toplam Sevkiyat'].sum():,.0f}")
+                with col4:
+                    st.metric("Toplam Kayıp", f"{marka_ozet['Satış Kaybı'].sum():,.0f}")
+                
+                st.markdown("---")
+                
+                # Tablo
+                st.dataframe(marka_ozet, use_container_width=True, height=400)
+                
+                # İndir
+                st.download_button(
+                    label="📥 Marka Analizi İndir (CSV)",
+                    data=marka_ozet.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name="marka_analizi.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("⚠️ Ürün Master yüklenmediği için marka analizi yapılamıyor.")
+        
+        # ============================================
+        # MAL GRUBU ANALİZİ
+        # ============================================
+        with tab2:
+            st.subheader("📦 Mal Grubu (MG) Bazında Analiz")
+            
+            # Ürün master ile birleştir (mg bilgisi için)
+            if st.session_state.urun_master is not None:
+                urun_mg = st.session_state.urun_master[['urun_kod', 'mg', 'mg_ad']].copy()
+                urun_mg['urun_kod'] = urun_mg['urun_kod'].astype(str)
+                
+                # Float string düzelt
+                urun_mg['urun_kod'] = urun_mg['urun_kod'].apply(
+                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                )
+                
+                result_mg = result_df.merge(urun_mg, on='urun_kod', how='left')
+                
+                # MG bazında özet
+                mg_ozet = result_mg.groupby(['mg', 'mg_ad']).agg({
+                    'ihtiyac_miktari': 'sum',
+                    'sevkiyat_miktari': 'sum',
+                    'stok_yoklugu_satis_kaybi': 'sum',
+                    'magaza_kod': 'nunique',
+                    'urun_kod': 'nunique'
+                }).reset_index()
+                
+                mg_ozet.columns = ['MG Kod', 'MG Adı', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
+                                   'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
+                
+                # Gerçekleşme oranı hesapla
+                mg_ozet['Gerçekleşme %'] = (
+                    mg_ozet['Toplam Sevkiyat'] / mg_ozet['Toplam İhtiyaç'] * 100
+                ).round(2)
+                
+                # Sırala
+                mg_ozet = mg_ozet.sort_values('Toplam İhtiyaç', ascending=False)
+                
+                # Özet metrikler
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Toplam MG", len(mg_ozet))
+                with col2:
+                    st.metric("Toplam İhtiyaç", f"{mg_ozet['Toplam İhtiyaç'].sum():,.0f}")
+                with col3:
+                    st.metric("Toplam Sevkiyat", f"{mg_ozet['Toplam Sevkiyat'].sum():,.0f}")
+                with col4:
+                    st.metric("Toplam Kayıp", f"{mg_ozet['Satış Kaybı'].sum():,.0f}")
+                
+                st.markdown("---")
+                
+                # Tablo
+                st.dataframe(mg_ozet, use_container_width=True, height=400)
+                
+                # İndir
+                st.download_button(
+                    label="📥 MG Analizi İndir (CSV)",
+                    data=mg_ozet.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name="mg_analizi.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("⚠️ Ürün Master yüklenmediği için MG analizi yapılamıyor.")
+        
+        # ============================================
+        # MAĞAZA ANALİZİ
+        # ============================================
+        with tab3:
+            st.subheader("🏪 Mağaza Bazında Analiz")
+            
+            # Mağaza bazında özet
+            magaza_ozet = result_df.groupby(['magaza_kod', 'magaza_ad']).agg({
+                'ihtiyac_miktari': 'sum',
+                'sevkiyat_miktari': 'sum',
+                'stok_yoklugu_satis_kaybi': 'sum',
+                'urun_kod': 'nunique'
+            }).reset_index()
+            
+            magaza_ozet.columns = ['Mağaza Kod', 'Mağaza Adı', 'Toplam İhtiyaç', 
+                                   'Toplam Sevkiyat', 'Satış Kaybı', 'Ürün Sayısı']
+            
+            # Gerçekleşme oranı hesapla
+            magaza_ozet['Gerçekleşme %'] = (
+                magaza_ozet['Toplam Sevkiyat'] / magaza_ozet['Toplam İhtiyaç'] * 100
+            ).round(2)
+            
+            # Sırala
+            magaza_ozet = magaza_ozet.sort_values('Toplam İhtiyaç', ascending=False)
+            
+            # Özet metrikler
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Toplam Mağaza", len(magaza_ozet))
+            with col2:
+                st.metric("Toplam İhtiyaç", f"{magaza_ozet['Toplam İhtiyaç'].sum():,.0f}")
+            with col3:
+                st.metric("Toplam Sevkiyat", f"{magaza_ozet['Toplam Sevkiyat'].sum():,.0f}")
+            with col4:
+                st.metric("Toplam Kayıp", f"{magaza_ozet['Satış Kaybı'].sum():,.0f}")
+            
+            st.markdown("---")
+            
+            # Tablo
+            st.dataframe(magaza_ozet, use_container_width=True, height=400)
+            
+            # İndir
+            st.download_button(
+                label="📥 Mağaza Analizi İndir (CSV)",
+                data=magaza_ozet.to_csv(index=False, encoding='utf-8-sig'),
+                file_name="magaza_analizi.csv",
+                mime="text/csv"
+            )
+        
+        # ============================================
+        # SATIŞ KAYBI ANALİZİ
+        # ============================================
+        with tab4:
+            st.subheader("⚠️ Stok Yokluğu Kaynaklı Satış Kaybı Analizi")
+            
+            # Sadece kayıp olanları al
+            kayip_df = result_df[result_df['stok_yoklugu_satis_kaybi'] > 0].copy()
+            
+            if len(kayip_df) > 0:
+                # Özet metrikler
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Kayıp Olan Satır", len(kayip_df))
+                with col2:
+                    st.metric("Toplam Satış Kaybı", f"{kayip_df['stok_yoklugu_satis_kaybi'].sum():,.0f}")
+                with col3:
+                    kayip_oran = (kayip_df['stok_yoklugu_satis_kaybi'].sum() / 
+                                 result_df['ihtiyac_miktari'].sum() * 100)
+                    st.metric("Kayıp Oranı", f"{kayip_oran:.2f}%")
+                
+                st.markdown("---")
+                
+                # En fazla kayıp olan 20 satır
+                st.write("**En Fazla Kayıp Olan 20 Satır:**")
+                top_kayip = kayip_df.nlargest(20, 'stok_yoklugu_satis_kaybi')[[
+                    'magaza_ad', 'urun_ad', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi'
+                ]]
+                st.dataframe(top_kayip, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Ürün bazında kayıp
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Ürün Bazında Toplam Kayıp (Top 10):**")
+                    urun_kayip = kayip_df.groupby('urun_ad')['stok_yoklugu_satis_kaybi'].sum().sort_values(ascending=False).head(10)
+                    st.dataframe(urun_kayip, use_container_width=True)
+                
+                with col2:
+                    st.write("**Mağaza Bazında Toplam Kayıp (Top 10):**")
+                    magaza_kayip = kayip_df.groupby('magaza_ad')['stok_yoklugu_satis_kaybi'].sum().sort_values(ascending=False).head(10)
+                    st.dataframe(magaza_kayip, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Detaylı rapor indir
+                st.download_button(
+                    label="📥 Detaylı Satış Kaybı Raporu İndir (CSV)",
+                    data=kayip_df.to_csv(index=False, encoding='utf-8-sig'),
+                    file_name="satis_kaybi_detay.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.success("✅ Hiç stok yokluğu kaynaklı satış kaybı yok!")
