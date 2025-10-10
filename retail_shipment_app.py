@@ -43,7 +43,7 @@ if 'siralama_data' not in st.session_state:
     st.session_state.siralama_data = None
 
 # Sidebar menü
-st.sidebar.title("📦 Sevkiyat Planlama")
+st.sidebar.title("📦Sevk Sistemi")
 menu = st.sidebar.radio(
     "Menü",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
