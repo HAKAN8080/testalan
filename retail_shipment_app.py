@@ -745,8 +745,8 @@ elif menu == "📊 Sıralama":
         st.subheader("🎯 Öncelik Sıralaması")
         
         st.info("""
-        **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
-        **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
+        **RPT:** Satanı tamamlar
+        **Min:** Stok seviyesi düşük olanları tamamlar
         
         Her kombinasyon için RPT ve Min öncelikleri sırayla oluşturulur.
         Örnek: Mağaza 0-4, Ürün 0-4 → RPT:1, Min:2
