@@ -752,24 +752,34 @@ elif menu == "📊 Sıralama":
         **RPT (Rapidity):** Hızlı sevkiyat önceliği - Ürünler hızlı bir şekilde dağıtılır
         **Min:** Minimum stok önceliği - Stok seviyesi düşük olan önceliklendirilir
         
-        Örnek: 0-4 | 0-4 | RPT | 1
+        Tüm mağaza-ürün kombinasyonları otomatik oluşturulmuştur. Durum ve öncelik değerlerini düzenleyebilirsiniz.
         """)
         
-        # Eğer daha önce kaydedilmişse onu kullan
+        # Eğer daha önce kaydedilmişse onu kullan, yoksa tüm kombinasyonları oluştur
         if st.session_state.siralama_data is not None:
             siralama_df = st.session_state.siralama_data
         else:
-            # Boş tablo ile başla - kullanıcı manuel ekleyecek
-            siralama_df = pd.DataFrame({
-                'Magaza_Cluster': ['0-4', '0-4', '5-8'],
-                'Urun_Cluster': ['0-4', '5-8', '0-4'],
-                'Durum': ['RPT', 'Min', 'RPT'],
-                'Oncelik': [1, 2, 3]
-            })
+            # Tüm kombinasyonları oluştur
+            siralama_rows = []
+            oncelik_counter = 1
+            for store_seg in store_segments:
+                for prod_seg in prod_segments:
+                    siralama_rows.append({
+                        'Magaza_Cluster': store_seg,
+                        'Urun_Cluster': prod_seg,
+                        'Durum': 'RPT',  # Default değer
+                        'Oncelik': oncelik_counter
+                    })
+                    oncelik_counter += 1
+            
+            siralama_df = pd.DataFrame(siralama_rows)
         
-        # Düzenlenebilir tablo
+        st.markdown("---")
+        st.subheader("📋 Tüm Kombinasyonlar (Elle Düzenlenebilir)")
+        
+        # Düzenlenebilir tablo - Tüm kombinasyonlar
         edited_siralama = st.data_editor(
-            siralama_df,
+            siralama_df.sort_values('Oncelik').reset_index(drop=True),
             use_container_width=True,
             num_rows="dynamic",
             column_config={
@@ -795,26 +805,14 @@ elif menu == "📊 Sıralama":
                     "Öncelik",
                     help="Öncelik sırası (1 = en yüksek öncelik)",
                     min_value=1,
-                    max_value=100,
+                    max_value=1000,
                     step=1,
                     format="%d"
                 )
             },
-            hide_index=True
+            hide_index=False,
+            height=500
         )
-        
-        # Önizleme - Tek tablo olarak önceliğe göre sıralı
-        st.markdown("---")
-        st.subheader("📋 Sıralama Önizleme (Önceliğe Göre)")
-        
-        # Sıralamaya göre önizleme
-        preview_df = edited_siralama.sort_values('Oncelik').reset_index(drop=True)
-        
-        # Öncelik numarasını göster
-        preview_display = preview_df.copy()
-        preview_display.index = preview_display.index + 1  # Index 1'den başlasın
-        
-        st.dataframe(preview_display, use_container_width=True, height=400)
         
         # Kaydet
         col1, col2 = st.columns([1, 4])
@@ -850,9 +848,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }    
-    
-    missing_data = [name for name, data in required_data.items() if data is None]
+    }    missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
     
     if missing_data:
