@@ -46,7 +46,7 @@ if 'siralama_data' not in st.session_state:
 st.sidebar.title("📦 Sevkiyat Planlama")
 menu = st.sidebar.radio(
     "Menü",
-    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon Ayarları", 
+    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
      "🎲 Hedef Matris", "📊 Sıralama", "🚚 Sevkiyat Hesaplama"]
 )
 
