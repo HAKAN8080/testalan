@@ -1878,29 +1878,58 @@ elif menu == "📈 Raporlar":
                             ]
                             
                             onceki_magaza = baslangic['stoklu_magaza_sayisi'].values[0] if len(baslangic) > 0 else 0
-                            depo_stok = baslangic['depo_stok_toplam'].values[0] if len(baslangic) > 0 else 0
+                            depo_stok_baslangic = baslangic['depo_stok_toplam'].values[0] if len(baslangic) > 0 else 0
                             
                             # Sevkiyat sonrası
                             sonraki_magaza = urun_sevk['magaza_kod'].nunique()
                             toplam_sevkiyat = urun_sevk['sevkiyat_miktari'].sum()
+                            toplam_ihtiyac = urun_sevk['ihtiyac_miktari'].sum()
+                            
+                            # Kalan depo = Başlangıç depo - Toplam sevkiyat
+                            kalan_depo = depo_stok_baslangic - toplam_sevkiyat
+                            
+                            # Sevk % = Sevkiyat / Depo Stok
+                            sevk_yuzde = (toplam_sevkiyat / depo_stok_baslangic * 100) if depo_stok_baslangic > 0 else 0
                             
                             # Ürün bilgisi
                             urun_ad = urun_sevk['urun_ad'].iloc[0] if 'urun_ad' in urun_sevk.columns else urun_kod
+                            
+                            # KPI min_deger bilgisi (debug için)
+                            # Ürün master'dan mg al
+                            if st.session_state.urun_master is not None:
+                                urun_info = st.session_state.urun_master[
+                                    st.session_state.urun_master['urun_kod'].astype(str).apply(
+                                        lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                                    ) == str(urun_kod)
+                                ]
+                                if len(urun_info) > 0:
+                                    mg_kod = str(urun_info['mg'].iloc[0])
+                                    # KPI'dan min_deger bul
+                                    kpi_info = st.session_state.kpi[
+                                        st.session_state.kpi['mg_id'].astype(str) == str(int(float(mg_kod)))
+                                    ]
+                                    min_deger_kpi = kpi_info['min_deger'].iloc[0] if len(kpi_info) > 0 else 0
+                                else:
+                                    min_deger_kpi = 0
+                            else:
+                                min_deger_kpi = 0
                             
                             yeni_urun_analiz.append({
                                 'Ürün Kodu': urun_kod,
                                 'Ürün Adı': urun_ad,
                                 'Önceki Mağaza': int(onceki_magaza),
                                 'Sevkiyat Yapılan Mağaza': sonraki_magaza,
-                                'Artış': sonraki_magaza - int(onceki_magaza),
+                                'Toplam İhtiyaç': int(toplam_ihtiyac),
                                 'Toplam Sevkiyat': int(toplam_sevkiyat),
-                                'Depo Stok': int(depo_stok),
-                                'Kalan Depo': int(depo_stok - toplam_sevkiyat)
+                                'Depo Stok (Başlangıç)': int(depo_stok_baslangic),
+                                'Kalan Depo': int(kalan_depo),
+                                'Sevk %': round(sevk_yuzde, 2),
+                                'Min Deger (KPI)': int(min_deger_kpi)
                             })
                     
                     if len(yeni_urun_analiz) > 0:
                         analiz_df = pd.DataFrame(yeni_urun_analiz)
-                        analiz_df = analiz_df.sort_values('Artış', ascending=False)
+                        analiz_df = analiz_df.sort_values('Toplam Sevkiyat', ascending=False)
                         
                         # Özet metrikler
                         col1, col2, col3, col4 = st.columns(4)
@@ -1909,8 +1938,8 @@ elif menu == "📈 Raporlar":
                         with col2:
                             st.metric("Toplam Sevkiyat", f"{analiz_df['Toplam Sevkiyat'].sum():,.0f}")
                         with col3:
-                            ortalama_artis = analiz_df['Artış'].mean()
-                            st.metric("Ortalama Mağaza Artışı", f"{ortalama_artis:.0f}")
+                            ortalama_sevk = analiz_df['Sevk %'].mean()
+                            st.metric("Ortalama Sevk %", f"{ortalama_sevk:.1f}%")
                         with col4:
                             toplam_magaza = analiz_df['Sevkiyat Yapılan Mağaza'].sum()
                             st.metric("Toplam Dağıtım Noktası", toplam_magaza)
@@ -1927,14 +1956,18 @@ elif menu == "📈 Raporlar":
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            st.write("**En Çok Dağıtılan 5 Ürün:**")
-                            top_dagilim = analiz_df.nlargest(5, 'Artış')[['Ürün Adı', 'Önceki Mağaza', 'Sevkiyat Yapılan Mağaza', 'Artış']]
-                            st.dataframe(top_dagilim, use_container_width=True)
+                            st.write("**En Çok Sevkiyat Yapılan 5 Ürün:**")
+                            top_sevkiyat = analiz_df.nlargest(5, 'Toplam Sevkiyat')[[
+                                'Ürün Adı', 'Toplam Sevkiyat', 'Sevk %', 'Min Deger (KPI)'
+                            ]]
+                            st.dataframe(top_sevkiyat, use_container_width=True)
                         
                         with col2:
-                            st.write("**En Fazla Sevkiyat Yapılan 5 Ürün:**")
-                            top_sevkiyat = analiz_df.nlargest(5, 'Toplam Sevkiyat')[['Ürün Adı', 'Toplam Sevkiyat', 'Kalan Depo']]
-                            st.dataframe(top_sevkiyat, use_container_width=True)
+                            st.write("**En Yüksek Sevk % (Top 5):**")
+                            top_sevk_yuzde = analiz_df.nlargest(5, 'Sevk %')[[
+                                'Ürün Adı', 'Toplam Sevkiyat', 'Depo Stok (Başlangıç)', 'Sevk %'
+                            ]]
+                            st.dataframe(top_sevk_yuzde, use_container_width=True)
                         
                         st.markdown("---")
                         
