@@ -861,7 +861,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
     optional_data = {
         "Haftalık Trend": st.session_state.haftalik_trend,
         "Yasak Master": st.session_state.yasak_master
-    }   
+    }    
     
     missing_data = [name for name, data in required_data.items() if data is None]
     optional_loaded = [name for name, data in optional_data.items() if data is not None]
@@ -1120,8 +1120,14 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     anlik_df['min_oran'] * anlik_df['min_deger']
                 ) - (anlik_df['stok'] + anlik_df['yol'])
                 
+                # Initial için: min_deger × genlestirme_orani - stok - yol
+                anlik_df['ihtiyac_initial'] = (
+                    anlik_df['min_deger'] * anlik_df['genlestirme']
+                ) - (anlik_df['stok'] + anlik_df['yol'])
+                
                 st.write(f"🔍 Debug: RPT ihtiyaç > 0: {(anlik_df['ihtiyac_rpt'] > 0).sum()}")
                 st.write(f"🔍 Debug: Min ihtiyaç > 0: {(anlik_df['ihtiyac_min'] > 0).sum()}")
+                st.write(f"🔍 Debug: Initial ihtiyaç > 0: {(anlik_df['ihtiyac_initial'] > 0).sum()}")
                 
                 # Min hesaplama örnek kontrol
                 min_rows = anlik_df[anlik_df['Durum'] == 'Min'].head(3)
@@ -1129,9 +1135,18 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 for idx, row in min_rows.iterrows():
                     st.write(f"  min_oran={row['min_oran']}, min_deger={row['min_deger']}, stok={row['stok']}, yol={row['yol']}, ihtiyac_min={row['ihtiyac_min']}")
                 
+                # Initial hesaplama örnek kontrol
+                initial_rows = anlik_df[anlik_df['Durum'] == 'Initial'].head(3)
+                if len(initial_rows) > 0:
+                    st.write("🔍 Debug: Initial örnek hesaplama:")
+                    for idx, row in initial_rows.iterrows():
+                        st.write(f"  min_deger={row['min_deger']}, genlestirme={row['genlestirme']}, stok={row['stok']}, yol={row['yol']}, ihtiyac_initial={row['ihtiyac_initial']}")
+                
                 # Durum'a göre final ihtiyacı belirle
                 anlik_df['ihtiyac'] = anlik_df.apply(
-                    lambda row: row['ihtiyac_rpt'] if row['Durum'] == 'RPT' else row['ihtiyac_min'],
+                    lambda row: (row['ihtiyac_rpt'] if row['Durum'] == 'RPT' 
+                                else row['ihtiyac_min'] if row['Durum'] == 'Min'
+                                else row['ihtiyac_initial']),
                     axis=1
                 )
                 
@@ -1141,6 +1156,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 st.write(f"🔍 Debug: İhtiyaç > 0 olan kayıt (tüm): {(anlik_df['ihtiyac'] > 0).sum()}")
                 st.write(f"🔍 Debug: İhtiyaç > 0 olan RPT: {((anlik_df['ihtiyac'] > 0) & (anlik_df['Durum'] == 'RPT')).sum()}")
                 st.write(f"🔍 Debug: İhtiyaç > 0 olan Min: {((anlik_df['ihtiyac'] > 0) & (anlik_df['Durum'] == 'Min')).sum()}")
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan Initial: {((anlik_df['ihtiyac'] > 0) & (anlik_df['Durum'] == 'Initial')).sum()}")
                 
                 # max_deger kontrolü - sevkiyat + stok + yol toplamı max_deger'i geçemesin
                 anlik_df['max_sevkiyat'] = anlik_df['max_deger'] - (anlik_df['stok'] + anlik_df['yol'])
@@ -1190,7 +1206,21 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 
                 # Önceliğe göre sırala ve sadece ihtiyacı olanları al
                 result_df = anlik_df[anlik_df['ihtiyac'] > 0].copy()
-                result_df = result_df.sort_values('Oncelik').reset_index(drop=True)
+                
+                # ÖNEMLI: Aynı mağaza-ürün için birden fazla durum varsa (RPT, Min, Initial)
+                # Maksimum ihtiyacı olanı al
+                result_df_max = result_df.loc[
+                    result_df.groupby(['magaza_kod', 'urun_kod'])['ihtiyac'].idxmax()
+                ].copy()
+                
+                st.write(f"🔍 Debug: Tüm ihtiyaç kayıtları: {len(result_df)}")
+                st.write(f"🔍 Debug: Maksimum alındıktan sonra: {len(result_df_max)}")
+                st.write(f"🔍 Debug: RPT sayısı: {(result_df_max['Durum'] == 'RPT').sum()}")
+                st.write(f"🔍 Debug: Min sayısı: {(result_df_max['Durum'] == 'Min').sum()}")
+                st.write(f"🔍 Debug: Initial sayısı: {(result_df_max['Durum'] == 'Initial').sum()}")
+                
+                # Önceliğe göre sırala
+                result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)
                 
                 st.write(f"🔍 Debug: Öncelik sıralaması sonrası kayıt: {len(result_df)}")
                 
@@ -1225,14 +1255,14 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     st.write(f"🔍 Debug: Örnek depo key'leri (düzeltilmiş): {sample_keys}")
                 
                 # İlk birkaç result_df satırının depo_kod ve urun_kod'unu göster
-                if len(result_df) > 0:
+                if len(result_df_max) > 0:
                     # Result_df'deki ürün kodlarını da düzelt
-                    result_df['urun_kod_clean'] = result_df['urun_kod'].astype(str).apply(
+                    result_df_max['urun_kod_clean'] = result_df_max['urun_kod'].astype(str).apply(
                         lambda x: str(int(float(x))) if ('.' in str(x)) else str(x)
                     )
-                    result_df['depo_kod_clean'] = result_df['depo_kod'].astype(str)
+                    result_df_max['depo_kod_clean'] = result_df_max['depo_kod'].astype(str)
                     
-                    sample_result = result_df[['depo_kod_clean', 'urun_kod', 'urun_kod_clean']].head(5)
+                    sample_result = result_df_max[['depo_kod_clean', 'urun_kod', 'urun_kod_clean', 'Durum', 'ihtiyac']].head(5)
                     st.write("🔍 Debug: Örnek result_df depo-ürün (düzeltilmiş):")
                     st.write(sample_result)
                 
@@ -1240,7 +1270,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                 sevkiyat_gercek = []
                 eslesme_sayisi = 0
                 
-                for idx, row in result_df.iterrows():
+                for idx, row in result_df_max.iterrows():
                     depo_kod = str(row['depo_kod'])
                     urun_kod_raw = str(row['urun_kod'])
                     
@@ -1275,23 +1305,23 @@ elif menu == "🚚 Sevkiyat Hesaplama":
                     
                     sevkiyat_gercek.append(sevkiyat)
                 
-                st.write(f"🔍 Debug: Depo-ürün eşleşme sayısı: {eslesme_sayisi} / {len(result_df)}")
+                st.write(f"🔍 Debug: Depo-ürün eşleşme sayısı: {eslesme_sayisi} / {len(result_df_max)}")
                 
-                result_df['sevkiyat_gercek'] = sevkiyat_gercek
+                result_df_max['sevkiyat_gercek'] = sevkiyat_gercek
                 
                 # Stok yokluğu kaybını hesapla
-                result_df['stok_yoklugu_kaybi'] = result_df['ihtiyac'] - result_df['sevkiyat_gercek']
+                result_df_max['stok_yoklugu_kaybi'] = result_df_max['ihtiyac'] - result_df_max['sevkiyat_gercek']
                 
                 # ÖNEMLİ: Sadece sevkiyat > 0 olanları DEĞİL, ihtiyaç > 0 olanların HEPSİNİ al
                 # Böylece stok olmayan ama ihtiyaç olan kayıtlar da rapora girer
-                result_df = result_df[result_df['ihtiyac'] > 0].copy()
+                result_df_max = result_df_max[result_df_max['ihtiyac'] > 0].copy()
                 
-                st.write(f"🔍 Debug: İhtiyaç > 0 olan tüm kayıtlar (sevkiyat=0 dahil): {len(result_df)}")
-                st.write(f"🔍 Debug: Sevkiyat > 0 olan kayıt: {(result_df['sevkiyat_gercek'] > 0).sum()}")
-                st.write(f"🔍 Debug: Sevkiyat = 0 olan kayıt: {(result_df['sevkiyat_gercek'] == 0).sum()}")
+                st.write(f"🔍 Debug: İhtiyaç > 0 olan tüm kayıtlar (sevkiyat=0 dahil): {len(result_df_max)}")
+                st.write(f"🔍 Debug: Sevkiyat > 0 olan kayıt: {(result_df_max['sevkiyat_gercek'] > 0).sum()}")
+                st.write(f"🔍 Debug: Sevkiyat = 0 olan kayıt: {(result_df_max['sevkiyat_gercek'] == 0).sum()}")
                 
                 # Sonuç tablosunu oluştur
-                result_final = result_df[[
+                result_final = result_df_max[[
                     'Oncelik', 'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad',
                     'magaza_segment', 'urun_segment', 'Durum',
                     'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_gercek', 'depo_kod'
