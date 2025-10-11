@@ -1542,8 +1542,28 @@ elif menu == "📈 Raporlar":
             
             # Ürün master ile birleştir (marka bilgisi için)
             if st.session_state.urun_master is not None and st.session_state.depo_stok is not None and st.session_state.anlik_stok_satis is not None:
+                
+                # Anlık stok/satış - marka bazında mağaza stoku ve satış (ÖNCE BU)
+                anlik_marka = st.session_state.anlik_stok_satis.copy()
+                
+                # Marka isimlerini temizle
+                anlik_marka['marka_ad'] = anlik_marka['marka_ad'].astype(str).str.strip()
+                
+                magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
+                    'stok': 'sum',
+                    'satis': 'sum',
+                    'ciro': 'sum'
+                }).reset_index()
+                magaza_stok_satis_marka.columns = ['Marka', 'Mağaza Stok', 'Satış', 'Ciro']
+                
+                # Debug
+                st.write("🔍 Debug: Mağaza stok/satış - ilk 5 marka:")
+                st.dataframe(magaza_stok_satis_marka.head())
+                
+                # Ürün master'dan marka bilgisi
                 urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad']].copy()
                 urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
+                urun_marka['marka_ad'] = urun_marka['marka_ad'].astype(str).str.strip()
                 
                 # Float string düzelt
                 urun_marka['urun_kod'] = urun_marka['urun_kod'].apply(
@@ -1551,7 +1571,9 @@ elif menu == "📈 Raporlar":
                 )
                 
                 # Sevkiyat sonuçlarını marka ile birleştir
+                result_df['urun_kod'] = result_df['urun_kod'].astype(str)
                 result_marka = result_df.merge(urun_marka, on='urun_kod', how='left')
+                result_marka['marka_ad'] = result_marka['marka_ad'].astype(str).str.strip()
                 
                 # Depo stok - marka bazında
                 depo_marka = st.session_state.depo_stok.copy()
@@ -1559,48 +1581,12 @@ elif menu == "📈 Raporlar":
                     lambda x: str(int(float(x))) if '.' in str(x) else str(x)
                 )
                 depo_marka = depo_marka.merge(urun_marka, on='urun_kod', how='left')
+                depo_marka['marka_ad'] = depo_marka['marka_ad'].astype(str).str.strip()
+                
                 depo_stok_marka = depo_marka.groupby('marka_ad')['stok'].sum().reset_index()
-                depo_stok_marka.columns = ['marka_ad', 'depo_stok']
+                depo_stok_marka.columns = ['Marka', 'Depo Stok']
                 
-                # Anlık stok/satış - marka bazında mağaza stoku ve satış
-                anlik_marka = st.session_state.anlik_stok_satis.copy()
-                
-                # Debug: Kolonları kontrol et
-                st.write("🔍 Debug: Anlık stok/satış kolonları:", anlik_marka.columns.tolist())
-                
-                # Marka_ad kolonu var mı kontrol et
-                if 'marka_ad' in anlik_marka.columns:
-                    # Direkt marka_ad kullan
-                    magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
-                        'stok': 'sum',
-                        'satis': 'sum',
-                        'ciro': 'sum'
-                    }).reset_index()
-                else:
-                    # Eğer marka_ad yoksa, ürün_kod üzerinden birleştir
-                    anlik_marka['urun_kod'] = anlik_marka['urun_kod'].astype(str).apply(
-                        lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                    )
-                    anlik_marka = anlik_marka.merge(urun_marka, on='urun_kod', how='left')
-                    magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
-                        'stok': 'sum',
-                        'satis': 'sum',
-                        'ciro': 'sum'
-                    }).reset_index()
-                
-                magaza_stok_satis_marka.columns = ['marka_ad', 'magaza_stok', 'satis', 'ciro']
-                
-                # Debug: Sonuçları göster
-                st.write("🔍 Debug: Mağaza stok/satış toplamları:")
-                st.write(f"- Toplam mağaza stok: {magaza_stok_satis_marka['magaza_stok'].sum():,.0f}")
-                st.write(f"- Toplam satış: {magaza_stok_satis_marka['satis'].sum():,.0f}")
-                st.write(f"- Toplam ciro: {magaza_stok_satis_marka['ciro'].sum():,.0f}")
-                
-                # İlk 5 satırı göster
-                st.write("🔍 Debug: İlk 5 marka:")
-                st.dataframe(magaza_stok_satis_marka.head())
-                
-                # Marka bazında özet
+                # Marka bazında sevkiyat özeti
                 marka_ozet = result_marka.groupby('marka_ad').agg({
                     'ihtiyac_miktari': 'sum',
                     'sevkiyat_miktari': 'sum',
@@ -1608,33 +1594,33 @@ elif menu == "📈 Raporlar":
                     'magaza_kod': 'nunique',
                     'urun_kod': 'nunique'
                 }).reset_index()
+                marka_ozet.columns = ['Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
+                                      'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
+                
+                # Debug: Sevkiyat markalarını göster
+                st.write("🔍 Debug: Sevkiyat - ilk 5 marka:")
+                st.dataframe(marka_ozet.head())
                 
                 # Tüm verileri birleştir
-                marka_ozet = marka_ozet.merge(depo_stok_marka, on='marka_ad', how='left')
-                marka_ozet = marka_ozet.merge(magaza_stok_satis_marka, on='marka_ad', how='left')
+                marka_ozet = marka_ozet.merge(depo_stok_marka, on='Marka', how='left')
+                marka_ozet = marka_ozet.merge(magaza_stok_satis_marka, on='Marka', how='left')
                 
-                # Debug: Merge sonrası kontrol
-                st.write("🔍 Debug: Merge sonrası null değerler:")
-                st.write(marka_ozet[['marka_ad', 'depo_stok', 'magaza_stok', 'satis', 'ciro']].isnull().sum())
+                # Debug: Merge sonrası
+                st.write("🔍 Debug: Merge sonrası - ilk 5 satır:")
+                st.dataframe(marka_ozet.head())
                 
                 # Eksik değerleri 0 yap
-                marka_ozet['depo_stok'] = marka_ozet['depo_stok'].fillna(0)
-                marka_ozet['magaza_stok'] = marka_ozet['magaza_stok'].fillna(0)
-                marka_ozet['satis'] = marka_ozet['satis'].fillna(0)
-                marka_ozet['ciro'] = marka_ozet['ciro'].fillna(0)
+                marka_ozet['Depo Stok'] = marka_ozet['Depo Stok'].fillna(0)
+                marka_ozet['Mağaza Stok'] = marka_ozet['Mağaza Stok'].fillna(0)
+                marka_ozet['Satış'] = marka_ozet['Satış'].fillna(0)
+                marka_ozet['Ciro'] = marka_ozet['Ciro'].fillna(0)
                 
                 # Satış kaybı % hesapla
-                marka_ozet['satis_kaybi_yuzde'] = (
-                    (marka_ozet['stok_yoklugu_satis_kaybi'] / marka_ozet['ihtiyac_miktari'] * 100)
+                marka_ozet['Satış Kaybı %'] = (
+                    (marka_ozet['Satış Kaybı'] / marka_ozet['Toplam İhtiyaç'] * 100)
                     .fillna(0)
                     .round(2)
                 )
-                
-                # Kolon adlarını düzenle
-                marka_ozet.columns = ['Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
-                                      'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı',
-                                      'Depo Stok', 'Mağaza Stok', 'Satış', 'Ciro',
-                                      'Satış Kaybı %']
                 
                 # Sırala
                 marka_ozet = marka_ozet.sort_values('Satış', ascending=False)
@@ -1681,14 +1667,18 @@ elif menu == "📈 Raporlar":
                 with col1:
                     st.write("**Top 10 Marka - Satış Bazında**")
                     top_satis = display_df.nlargest(10, 'Satış')
-                    if len(top_satis) > 0:
+                    if len(top_satis) > 0 and top_satis['Satış'].sum() > 0:
                         st.bar_chart(top_satis.set_index('Marka')['Satış'])
+                    else:
+                        st.info("Satış verisi bulunamadı")
                 
                 with col2:
                     st.write("**Top 10 Marka - Satış Kaybı %**")
                     top_kayip = display_df.nlargest(10, 'Satış Kaybı %')
-                    if len(top_kayip) > 0:
+                    if len(top_kayip) > 0 and top_kayip['Satış Kaybı %'].sum() > 0:
                         st.bar_chart(top_kayip.set_index('Marka')['Satış Kaybı %'])
+                    else:
+                        st.info("Satış kaybı verisi bulunamadı")
                 
                 st.markdown("---")
                 
@@ -1701,8 +1691,6 @@ elif menu == "📈 Raporlar":
                 )
             else:
                 st.warning("⚠️ Ürün Master, Depo Stok veya Anlık Stok/Satış yüklenmediği için marka analizi yapılamıyor.")
-
-        
         # ============================================
         # MAĞAZA ANALİZİ
         # ============================================
