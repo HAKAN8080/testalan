@@ -1536,6 +1536,7 @@ elif menu == "📈 Raporlar":
         # ============================================
         # MARKA ANALİZİ
         # ============================================
+
         with tab1:
     st.subheader("🏷️ Marka Bazında Analiz")
     
@@ -1670,70 +1671,6 @@ elif menu == "📈 Raporlar":
         )
     else:
         st.warning("⚠️ Ürün Master veya Depo Stok yüklenmediği için marka analizi yapılamıyor.")
-        
-        # ============================================
-        # MAL GRUBU ANALİZİ
-        # ============================================
-        with tab2:
-            st.subheader("📦 Mal Grubu (MG) Bazında Analiz")
-            
-            # Ürün master ile birleştir (mg bilgisi için)
-            if st.session_state.urun_master is not None:
-                urun_mg = st.session_state.urun_master[['urun_kod', 'mg', 'mg_ad']].copy()
-                urun_mg['urun_kod'] = urun_mg['urun_kod'].astype(str)
-                
-                # Float string düzelt
-                urun_mg['urun_kod'] = urun_mg['urun_kod'].apply(
-                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                )
-                
-                result_mg = result_df.merge(urun_mg, on='urun_kod', how='left')
-                
-                # MG bazında özet
-                mg_ozet = result_mg.groupby(['mg', 'mg_ad']).agg({
-                    'ihtiyac_miktari': 'sum',
-                    'sevkiyat_miktari': 'sum',
-                    'stok_yoklugu_satis_kaybi': 'sum',
-                    'magaza_kod': 'nunique',
-                    'urun_kod': 'nunique'
-                }).reset_index()
-                
-                mg_ozet.columns = ['MG Kod', 'MG Adı', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
-                                   'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
-                
-                # Gerçekleşme oranı hesapla
-                mg_ozet['Gerçekleşme %'] = (
-                    mg_ozet['Toplam Sevkiyat'] / mg_ozet['Toplam İhtiyaç'] * 100
-                ).round(2)
-                
-                # Sırala
-                mg_ozet = mg_ozet.sort_values('Toplam İhtiyaç', ascending=False)
-                
-                # Özet metrikler
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Toplam MG", len(mg_ozet))
-                with col2:
-                    st.metric("Toplam İhtiyaç", f"{mg_ozet['Toplam İhtiyaç'].sum():,.0f}")
-                with col3:
-                    st.metric("Toplam Sevkiyat", f"{mg_ozet['Toplam Sevkiyat'].sum():,.0f}")
-                with col4:
-                    st.metric("Toplam Kayıp", f"{mg_ozet['Satış Kaybı'].sum():,.0f}")
-                
-                st.markdown("---")
-                
-                # Tablo
-                st.dataframe(mg_ozet, use_container_width=True, height=400)
-                
-                # İndir
-                st.download_button(
-                    label="📥 MG Analizi İndir (CSV)",
-                    data=mg_ozet.to_csv(index=False, encoding='utf-8-sig'),
-                    file_name="mg_analizi.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.warning("⚠️ Ürün Master yüklenmediği için MG analizi yapılamıyor.")
         
         # ============================================
         # MAĞAZA ANALİZİ
