@@ -1719,7 +1719,7 @@ def calculate_purchase_need(sevk_df, total_sevk, original_sevkiyat_df, depo_stok
 # ============================================
 # 📈 RAPORLAR
 # ============================================
-elif menu == "📈 Raporlar":
+    elif menu == "📈 Raporlar":
     st.title("📈 Raporlar ve Analizler")
     st.markdown("---")
     
