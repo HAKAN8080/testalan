@@ -1572,10 +1572,6 @@ elif menu == "📈 Raporlar":
                 magaza_stok_satis_marka = magaza_stok_satis_marka[['marka_kod', 'marka_ad', 'stok', 'satis', 'ciro']]
                 magaza_stok_satis_marka.columns = ['marka_kod', 'Marka', 'Mağaza Stok', 'Satış', 'Ciro']
                 
-                # Debug
-                st.write("🔍 Debug: Anlık stok/satış - ilk 10 marka:")
-                st.dataframe(magaza_stok_satis_marka.head(10))
-                
                 # ========================================
                 # 2. DEPO STOK - Marka bazında
                 # ========================================
@@ -1592,14 +1588,9 @@ elif menu == "📈 Raporlar":
                 )
                 
                 depo_stok_marka = depo_marka.groupby('marka_kod').agg({
-                    'stok': 'sum',
-                    'marka_ad': 'first'  # Marka adını al
+                    'stok': 'sum'
                 }).reset_index()
-                depo_stok_marka.columns = ['marka_kod', 'Marka', 'Depo Stok']
-                
-                # Debug
-                st.write("🔍 Debug: Depo stok - ilk 10 marka:")
-                st.dataframe(depo_stok_marka.head(10))
+                depo_stok_marka.columns = ['marka_kod', 'Depo Stok']
                 
                 # ========================================
                 # 3. SEVKİYAT SONUCU - Marka bazında
@@ -1623,10 +1614,6 @@ elif menu == "📈 Raporlar":
                 marka_ozet.columns = ['marka_kod', 'Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
                                       'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
                 
-                # Debug
-                st.write("🔍 Debug: Sevkiyat sonucu - ilk 10 marka:")
-                st.dataframe(marka_ozet.head(10))
-                
                 # ========================================
                 # 4. TÜM VERİLERİ BİRLEŞTİR (marka_kod üzerinden)
                 # ========================================
@@ -1641,15 +1628,11 @@ elif menu == "📈 Raporlar":
                     how='left'
                 )
                 
-                # Debug: Merge sonrası
-                st.write("🔍 Debug: Merge sonrası ilk 10 satır:")
-                st.dataframe(marka_ozet.head(10))
-                
-                # Eksik değerleri 0 yap
-                marka_ozet['Depo Stok'] = marka_ozet['Depo Stok'].fillna(0)
-                marka_ozet['Mağaza Stok'] = marka_ozet['Mağaza Stok'].fillna(0)
-                marka_ozet['Satış'] = marka_ozet['Satış'].fillna(0)
-                marka_ozet['Ciro'] = marka_ozet['Ciro'].fillna(0)
+                # Eksik değerleri 0 yap ve sayısal tipe çevir
+                marka_ozet['Depo Stok'] = pd.to_numeric(marka_ozet['Depo Stok'], errors='coerce').fillna(0)
+                marka_ozet['Mağaza Stok'] = pd.to_numeric(marka_ozet['Mağaza Stok'], errors='coerce').fillna(0)
+                marka_ozet['Satış'] = pd.to_numeric(marka_ozet['Satış'], errors='coerce').fillna(0)
+                marka_ozet['Ciro'] = pd.to_numeric(marka_ozet['Ciro'], errors='coerce').fillna(0)
                 
                 # Satış kaybı % hesapla
                 marka_ozet['Satış Kaybı %'] = (
