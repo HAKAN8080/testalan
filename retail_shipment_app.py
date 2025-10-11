@@ -1537,65 +1537,139 @@ elif menu == "📈 Raporlar":
         # MARKA ANALİZİ
         # ============================================
         with tab1:
-            st.subheader("🏷️ Marka Bazında Analiz")
-            
-            # Ürün master ile birleştir (marka bilgisi için)
-            if st.session_state.urun_master is not None:
-                urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad']].copy()
-                urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
-                
-                # Float string düzelt
-                urun_marka['urun_kod'] = urun_marka['urun_kod'].apply(
-                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                )
-                
-                result_marka = result_df.merge(urun_marka, on='urun_kod', how='left')
-                
-                # Marka bazında özet
-                marka_ozet = result_marka.groupby('marka_ad').agg({
-                    'ihtiyac_miktari': 'sum',
-                    'sevkiyat_miktari': 'sum',
-                    'stok_yoklugu_satis_kaybi': 'sum',
-                    'magaza_kod': 'nunique',
-                    'urun_kod': 'nunique'
-                }).reset_index()
-                
-                marka_ozet.columns = ['Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
-                                      'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı']
-                
-                # Gerçekleşme oranı hesapla
-                marka_ozet['Gerçekleşme %'] = (
-                    marka_ozet['Toplam Sevkiyat'] / marka_ozet['Toplam İhtiyaç'] * 100
-                ).round(2)
-                
-                # Sırala
-                marka_ozet = marka_ozet.sort_values('Toplam İhtiyaç', ascending=False)
-                
-                # Özet metrikler
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Toplam Marka", len(marka_ozet))
-                with col2:
-                    st.metric("Toplam İhtiyaç", f"{marka_ozet['Toplam İhtiyaç'].sum():,.0f}")
-                with col3:
-                    st.metric("Toplam Sevkiyat", f"{marka_ozet['Toplam Sevkiyat'].sum():,.0f}")
-                with col4:
-                    st.metric("Toplam Kayıp", f"{marka_ozet['Satış Kaybı'].sum():,.0f}")
-                
-                st.markdown("---")
-                
-                # Tablo
-                st.dataframe(marka_ozet, use_container_width=True, height=400)
-                
-                # İndir
-                st.download_button(
-                    label="📥 Marka Analizi İndir (CSV)",
-                    data=marka_ozet.to_csv(index=False, encoding='utf-8-sig'),
-                    file_name="marka_analizi.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.warning("⚠️ Ürün Master yüklenmediği için marka analizi yapılamıyor.")
+    st.subheader("🏷️ Marka Bazında Analiz")
+    
+    # Ürün master ile birleştir (marka bilgisi için)
+    if st.session_state.urun_master is not None and st.session_state.depo_stok is not None:
+        urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad']].copy()
+        urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
+        
+        # Float string düzelt
+        urun_marka['urun_kod'] = urun_marka['urun_kod'].apply(
+            lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+        )
+        
+        # Sevkiyat sonuçlarını marka ile birleştir
+        result_marka = result_df.merge(urun_marka, on='urun_kod', how='left')
+        
+        # Depo stok - marka bazında
+        depo_marka = st.session_state.depo_stok.copy()
+        depo_marka['urun_kod'] = depo_marka['urun_kod'].astype(str).apply(
+            lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+        )
+        depo_marka = depo_marka.merge(urun_marka, on='urun_kod', how='left')
+        depo_stok_marka = depo_marka.groupby('marka_ad')['stok'].sum().reset_index()
+        depo_stok_marka.columns = ['marka_ad', 'depo_stok']
+        
+        # Anlık stok/satış - marka bazında mağaza stoku ve satış
+        anlik_marka = st.session_state.anlik_stok_satis.copy()
+        anlik_marka['urun_kod'] = anlik_marka['urun_kod'].astype(str).apply(
+            lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+        )
+        anlik_marka = anlik_marka.merge(urun_marka, on='urun_kod', how='left')
+        
+        magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
+            'stok': 'sum',
+            'satis': 'sum',
+            'ciro': 'sum'
+        }).reset_index()
+        magaza_stok_satis_marka.columns = ['marka_ad', 'magaza_stok', 'satis', 'ciro']
+        
+        # Marka bazında özet
+        marka_ozet = result_marka.groupby('marka_ad').agg({
+            'ihtiyac_miktari': 'sum',
+            'sevkiyat_miktari': 'sum',
+            'stok_yoklugu_satis_kaybi': 'sum',
+            'magaza_kod': 'nunique',
+            'urun_kod': 'nunique'
+        }).reset_index()
+        
+        # Tüm verileri birleştir
+        marka_ozet = marka_ozet.merge(depo_stok_marka, on='marka_ad', how='left')
+        marka_ozet = marka_ozet.merge(magaza_stok_satis_marka, on='marka_ad', how='left')
+        
+        # Eksik değerleri 0 yap
+        marka_ozet['depo_stok'] = marka_ozet['depo_stok'].fillna(0)
+        marka_ozet['magaza_stok'] = marka_ozet['magaza_stok'].fillna(0)
+        marka_ozet['satis'] = marka_ozet['satis'].fillna(0)
+        marka_ozet['ciro'] = marka_ozet['ciro'].fillna(0)
+        
+        # Satış kaybı % hesapla
+        marka_ozet['satis_kaybi_yuzde'] = (
+            (marka_ozet['stok_yoklugu_satis_kaybi'] / marka_ozet['ihtiyac_miktari'] * 100)
+            .fillna(0)
+            .round(2)
+        )
+        
+        # Kolon adlarını düzenle
+        marka_ozet.columns = ['Marka', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
+                              'Satış Kaybı', 'Mağaza Sayısı', 'Ürün Sayısı',
+                              'Depo Stok', 'Mağaza Stok', 'Satış', 'Ciro',
+                              'Satış Kaybı %']
+        
+        # Sırala
+        marka_ozet = marka_ozet.sort_values('Satış', ascending=False)
+        
+        # Özet metrikler
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Toplam Marka", len(marka_ozet))
+        with col2:
+            st.metric("Toplam Depo Stok", f"{marka_ozet['Depo Stok'].sum():,.0f}")
+        with col3:
+            st.metric("Toplam Mağaza Stok", f"{marka_ozet['Mağaza Stok'].sum():,.0f}")
+        with col4:
+            st.metric("Toplam Satış", f"{marka_ozet['Satış'].sum():,.0f}")
+        with col5:
+            st.metric("Toplam Ciro", f"{marka_ozet['Ciro'].sum():,.0f} ₺")
+        
+        st.markdown("---")
+        
+        # Tablo - istenen kolonları göster
+        display_df = marka_ozet[[
+            'Marka', 'Depo Stok', 'Mağaza Stok', 'Satış', 
+            'Ciro', 'Satış Kaybı %'
+        ]].copy()
+        
+        # Formatla
+        st.dataframe(
+            display_df.style.format({
+                'Depo Stok': '{:,.0f}',
+                'Mağaza Stok': '{:,.0f}',
+                'Satış': '{:,.0f}',
+                'Ciro': '{:,.0f} ₺',
+                'Satış Kaybı %': '{:.2f}%'
+            }),
+            use_container_width=True, 
+            height=400
+        )
+        
+        st.markdown("---")
+        
+        # Grafikler
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Top 10 Marka - Satış Bazında**")
+            top_satis = display_df.nlargest(10, 'Satış')
+            st.bar_chart(top_satis.set_index('Marka')['Satış'])
+        
+        with col2:
+            st.write("**Top 10 Marka - Satış Kaybı %**")
+            top_kayip = display_df.nlargest(10, 'Satış Kaybı %')
+            st.bar_chart(top_kayip.set_index('Marka')['Satış Kaybı %'])
+        
+        st.markdown("---")
+        
+        # İndir
+        st.download_button(
+            label="📥 Marka Analizi İndir (CSV)",
+            data=marka_ozet.to_csv(index=False, encoding='utf-8-sig'),
+            file_name="marka_analizi.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("⚠️ Ürün Master veya Depo Stok yüklenmediği için marka analizi yapılamıyor.")
         
         # ============================================
         # MAL GRUBU ANALİZİ
