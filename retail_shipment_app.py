@@ -1563,18 +1563,29 @@ elif menu == "📈 Raporlar":
                 depo_stok_marka.columns = ['marka_ad', 'depo_stok']
                 
                 # Anlık stok/satış - marka bazında mağaza stoku ve satış
+                # Anlık stok/satış verisinde zaten marka_ad kolonu var
                 anlik_marka = st.session_state.anlik_stok_satis.copy()
-                anlik_marka['urun_kod'] = anlik_marka['urun_kod'].astype(str).apply(
-                    lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                )
-                anlik_marka = anlik_marka.merge(urun_marka, on='urun_kod', how='left')
                 
-                magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
-                    'stok': 'sum',
-                    'satis': 'sum',
-                    'ciro': 'sum'
-                }).reset_index()
-                magaza_stok_satis_marka.columns = ['marka_ad', 'magaza_stok', 'satis', 'ciro']
+                # Marka_ad kolonu var mı kontrol et
+                if 'marka_ad' in anlik_marka.columns:
+                    magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
+                        'stok': 'sum',
+                        'satis': 'sum',
+                        'ciro': 'sum'
+                    }).reset_index()
+                    magaza_stok_satis_marka.columns = ['marka_ad', 'magaza_stok', 'satis', 'ciro']
+                else:
+                    # Eğer marka_ad yoksa, ürün_kod üzerinden birleştir
+                    anlik_marka['urun_kod'] = anlik_marka['urun_kod'].astype(str).apply(
+                        lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                    )
+                    anlik_marka = anlik_marka.merge(urun_marka, on='urun_kod', how='left')
+                    magaza_stok_satis_marka = anlik_marka.groupby('marka_ad').agg({
+                        'stok': 'sum',
+                        'satis': 'sum',
+                        'ciro': 'sum'
+                    }).reset_index()
+                    magaza_stok_satis_marka.columns = ['marka_ad', 'magaza_stok', 'satis', 'ciro']
                 
                 # Marka bazında özet
                 marka_ozet = result_marka.groupby('marka_ad').agg({
@@ -1671,6 +1682,7 @@ elif menu == "📈 Raporlar":
                 )
             else:
                 st.warning("⚠️ Ürün Master veya Depo Stok yüklenmediği için marka analizi yapılamıyor.")
+
 
         
         # ============================================
