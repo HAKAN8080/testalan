@@ -90,10 +90,10 @@ if menu == "🏠 Ana Sayfa":
     st.markdown("### 📋 İşlem Adımları")
     st.info("""
     1. **Veri Yükleme**: Tüm CSV dosyalarını yükleyin (Ürün Master, Mağaza Master, Yasak, Depo Stok, Anlık Stok/Satış, Haftalık Trend, KPI)
-    2. **Segmentasyon Ayarları**: Ürün ve mağaza gruplama aralıklarını belirleyin
+    2. **Segmentasyon**: Ürün ve mağaza gruplama aralıklarını belirleyin
     3. **Hedef Matris**: Her segment için şişme oranı, genleştirme oranı ve min oranı girin
     4. **Sıralama**: Mağaza ve ürün cluster önceliklerini belirleyin
-    5. **Sevkiyat Hesaplama**: Sonuçları görüntüleyin ve export edin
+    5. **Hesaplama**: Sonuçları görüntüleyin ve export edin
     """)
 
 # ============================================
@@ -415,8 +415,8 @@ elif menu == "📤 Veri Yükleme":
 # ============================================
 # 🎯 SEGMENTASYON AYARLARI
 # ============================================
-elif menu == "🎯 Segmentasyon Ayarları":
-    st.title("🎯 Segmentasyon Ayarları")
+elif menu == "🎯 Segmentasyon":
+    st.title("🎯 Segmentasyon")
     st.markdown("---")
     
     st.info("**Stok/Satış oranına göre** ürün ve mağazaları gruplandırma (Toplam Stok / Toplam Satış)")
@@ -519,7 +519,7 @@ elif menu == "🎯 Segmentasyon Ayarları":
         st.write("**Mağaza Dağılımı Önizleme:**")
         st.dataframe(temp_store['segment'].value_counts().sort_index(), use_container_width=True)
     
-    if st.button("💾 Segmentasyon Ayarlarını Kaydet", type="primary"):
+    if st.button("💾 Segmentasyonnı Kaydet", type="primary"):
         st.session_state.segmentation_params = {
             'product_ranges': product_ranges,
             'store_ranges': store_ranges
@@ -858,10 +858,10 @@ elif menu == "📊 Sıralama":
                 st.rerun()
 
 # ============================================
-# 🚚 SEVKIYAT HESAPLAMA
+# 🚚 Hesaplama
 # ============================================
-elif menu == "🚚 Sevkiyat Hesaplama":
-    st.title("🚚 Sevkiyat Hesaplama")
+elif menu == "🚚 Hesaplama":
+    st.title("🚚 Hesaplama")
     st.markdown("---")
     
     # Tüm verilerin yüklenip yüklenmediğini kontrol et
@@ -892,7 +892,7 @@ elif menu == "🚚 Sevkiyat Hesaplama":
         st.info("""
         Tamamlanması gereken zorunlu adımlar:
         - ✅ Veri Yükleme (Ürün Master, Mağaza Master, Depo Stok, Anlık Stok/Satış, KPI)
-        - ✅ Segmentasyon Ayarları
+        - ✅ Segmentasyon
         - ✅ Hedef Matris (Tüm 3 matris)
         - ✅ Sıralama Öncelikleri
         
@@ -1516,8 +1516,8 @@ elif menu == "📈 Raporlar":
     
     # Sevkiyat sonucu var mı kontrol et
     if st.session_state.sevkiyat_sonuc is None:
-        st.warning("⚠️ Henüz sevkiyat hesaplaması yapılmadı!")
-        st.info("Lütfen önce 'Sevkiyat Hesaplama' menüsünden hesaplama yapın.")
+        st.warning("⚠️ Henüz Hesaplaması yapılmadı!")
+        st.info("Lütfen önce 'Hesaplama' menüsünden hesaplama yapın.")
     else:
         result_df = st.session_state.sevkiyat_sonuc.copy()
         
