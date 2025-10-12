@@ -1505,7 +1505,13 @@ elif menu == "💵 Alım Sipariş":
                 # Verileri hazırla
                 anlik_df = st.session_state.anlik_stok_satis.copy()
                 depo_df = st.session_state.depo_stok.copy()
-                urun_master = st.session_state.urun_master[['urun_kod', 'urun_ad', 'marka_ad', 'mg_ad', 'mg']].copy()
+                # Ürün Master'dan gerekli kolonları al
+                available_cols = ['urun_kod']
+                for col in ['urun_ad', 'marka_ad', 'mg_ad', 'mg']:
+                    if col in st.session_state.urun_master.columns:
+                        available_cols.append(col)
+                
+                urun_master = st.session_state.urun_master[available_cols].copy()
                 kpi_df = st.session_state.kpi.copy()
                 
                 # Veri tiplerini düzelt
