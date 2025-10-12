@@ -47,13 +47,13 @@ if 'sevkiyat_sonuc' not in st.session_state:
 if 'yeni_urun_listesi' not in st.session_state:
     st.session_state.yeni_urun_listesi = None
 
-# Sidebar menü - BUL VE DEĞİŞTİR
+# Sidebar menü 
 st.sidebar.title("📦 Sevkiyat")
 menu = st.sidebar.radio(
     "Menü",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
-     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Hesaplama", "🛒 Alım Sipariş", "📈 Raporlar"]
-
+     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Hesaplama", "🛒 Alım Sipariş", "📈 Raporlar", "💾 Master Data"]
+)
 )
 
 # ============================================
