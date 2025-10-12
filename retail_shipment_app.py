@@ -1552,7 +1552,6 @@ elif menu == "🛒 Alım Sipariş":
                     urun_toplam = urun_toplam.merge(ihtiyac_toplam, on='urun_kod', how='left')
                     urun_toplam['ihtiyac_miktari'] = urun_toplam['ihtiyac_miktari'].fillna(0)
                 else:
-                    # Sevkiyat hesaplaması yapılmamışsa, basit tahmin (forward cover mantığı)
                     st.warning("⚠️ Sevkiyat hesaplaması yapılmamış. İhtiyaç = 2 × Satış olarak tahmin ediliyor.")
                     urun_toplam['ihtiyac_miktari'] = 2 * urun_toplam['satis']
                 
@@ -1562,19 +1561,37 @@ elif menu == "🛒 Alım Sipariş":
                 }).reset_index()
                 depo_toplam.columns = ['urun_kod', 'depo_stok']
                 
-                # Birleştir
+                # ÖNEMLİ: TÜM ÜRÜNLERİ dahil et (depo stoğu olmasa bile)
                 alim_df = urun_toplam.merge(depo_toplam, on='urun_kod', how='left')
-                alim_df['depo_stok'] = alim_df['depo_stok'].fillna(0)
+                alim_df['depo_stok'] = alim_df['depo_stok'].fillna(0)  # Depo stoğu yoksa 0
+                
+                # DEBUG: Ara sonuçları göster
+                st.write("🔍 **Debug Bilgileri:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.write(f"- Toplam ürün sayısı: {len(alim_df)}")
+                with col2:
+                    st.write(f"- Depo stoğu olan ürün: {(alim_df['depo_stok'] > 0).sum()}")
+                with col3:
+                    st.write(f"- Depo stoğu olmayan ürün: {(alim_df['depo_stok'] == 0).sum()}")
                 
                 # ALIM İHTİYACI FORMÜLÜ
-                alim_df['alim_ihtiyaci'] = (
-                    alim_df['ihtiyac_miktari'] + 
-                    (2 * alim_df['satis']) - 
-                    (alim_df['stok'] + alim_df['yol'] + alim_df['depo_stok'])
-                )
+                alim_df['guvenlik_stoku'] = 2 * alim_df['satis']
+                alim_df['eldeki_toplam'] = alim_df['stok'] + alim_df['yol'] + alim_df['depo_stok']
+                alim_df['ihtiyac_toplam'] = alim_df['ihtiyac_miktari'] + alim_df['guvenlik_stoku']
                 
-                # Sadece alım ihtiyacı > 0 olanları al
-                alim_df = alim_df[alim_df['alim_ihtiyaci'] > 0].copy()
+                alim_df['alim_ihtiyaci'] = alim_df['ihtiyac_toplam'] - alim_df['eldeki_toplam']
+                
+                # DEBUG: Formül detayları
+                st.write("📊 **Formül Detayları (İlk 5 Ürün):**")
+                debug_df = alim_df[['urun_kod', 'ihtiyac_miktari', 'satis', 'guvenlik_stoku', 
+                                     'stok', 'yol', 'depo_stok', 'eldeki_toplam', 'ihtiyac_toplam', 'alim_ihtiyaci']].head(5)
+                st.dataframe(debug_df, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Tüm ürünleri göster (alım ihtiyacı pozitif ve negatif olanlar)
+                st.subheader("📋 Tüm Ürünler - Alım İhtiyacı Analizi")
                 
                 # Ürün detaylarını ekle
                 alim_df = alim_df.merge(urun_master, on='urun_kod', how='left')
@@ -1582,19 +1599,57 @@ elif menu == "🛒 Alım Sipariş":
                 # Sırala (en yüksek ihtiyaç önce)
                 alim_df = alim_df.sort_values('alim_ihtiyaci', ascending=False).reset_index(drop=True)
                 
+                # Kategorize et
+                alim_df['durum'] = alim_df['alim_ihtiyaci'].apply(
+                    lambda x: '🔴 Acil Alım' if x > 1000 
+                    else '🟡 Alım Gerekli' if x > 0 
+                    else '🟢 Stok Yeterli'
+                )
+                
                 # Sıra numarası ekle
                 alim_df.insert(0, 'sira_no', range(1, len(alim_df) + 1))
                 
                 # Kolonları düzenle
-                alim_final = alim_df[[
-                    'sira_no', 'urun_kod', 'urun_ad', 'marka_ad', 'mg_ad',
-                    'ihtiyac_miktari', 'satis', 'stok', 'yol', 'depo_stok', 'alim_ihtiyaci'
+                alim_final_full = alim_df[[
+                    'sira_no', 'urun_kod', 'urun_ad', 'marka_ad', 'mg_ad', 'durum',
+                    'ihtiyac_miktari', 'satis', 'guvenlik_stoku', 
+                    'stok', 'yol', 'depo_stok', 'eldeki_toplam', 'ihtiyac_toplam', 'alim_ihtiyaci'
                 ]].copy()
                 
-                alim_final.columns = [
-                    'Sıra', 'Ürün Kodu', 'Ürün Adı', 'Marka', 'Mal Grubu',
-                    'Sevkiyat İhtiyacı', 'Güncel Satış', 'Mağaza Stok', 'Yol', 'Depo Stok', 'Alım İhtiyacı'
+                alim_final_full.columns = [
+                    'Sıra', 'Ürün Kodu', 'Ürün Adı', 'Marka', 'Mal Grubu', 'Durum',
+                    'Sevkiyat İhtiyacı', 'Güncel Satış', 'Güvenlik Stoku (2×Satış)',
+                    'Mağaza Stok', 'Yol', 'Depo Stok', 'Eldeki Toplam', 'İhtiyaç Toplam', 'Alım İhtiyacı'
                 ]
+                
+                # Filtreleme
+                durum_filtre = st.multiselect(
+                    "Duruma Göre Filtrele",
+                    options=['🔴 Acil Alım', '🟡 Alım Gerekli', '🟢 Stok Yeterli'],
+                    default=['🔴 Acil Alım', '🟡 Alım Gerekli']
+                )
+                
+                filtered_df = alim_final_full[alim_final_full['Durum'].isin(durum_filtre)]
+                
+                st.write(f"**Gösterilen: {len(filtered_df)} ürün**")
+                st.dataframe(
+                    filtered_df.style.format({
+                        'Sevkiyat İhtiyacı': '{:,.0f}',
+                        'Güncel Satış': '{:,.0f}',
+                        'Güvenlik Stoku (2×Satış)': '{:,.0f}',
+                        'Mağaza Stok': '{:,.0f}',
+                        'Yol': '{:,.0f}',
+                        'Depo Stok': '{:,.0f}',
+                        'Eldeki Toplam': '{:,.0f}',
+                        'İhtiyaç Toplam': '{:,.0f}',
+                        'Alım İhtiyacı': '{:,.0f}'
+                    }),
+                    use_container_width=True,
+                    height=400
+                )
+                
+                # Sadece alım ihtiyacı > 0 olanları al (özet için)
+                alim_final = alim_final_full[alim_final_full['Alım İhtiyacı'] > 0].copy()
                 
                 st.success("✅ Alım sipariş hesaplaması tamamlandı!")
                 st.balloons()
@@ -1604,78 +1659,89 @@ elif menu == "🛒 Alım Sipariş":
                 st.subheader("📊 Alım Sipariş Özeti")
                 
                 # Metrikler
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3, col4, col5 = st.columns(5)
                 with col1:
-                    st.metric("📦 Alım Gereken Ürün", len(alim_final))
+                    st.metric("📦 Toplam Ürün", len(alim_final_full))
                 with col2:
+                    alim_gereken = len(alim_final)
+                    st.metric("🛒 Alım Gereken", alim_gereken)
+                with col3:
+                    acil_alim = len(alim_final_full[alim_final_full['Durum'] == '🔴 Acil Alım'])
+                    st.metric("🔴 Acil", acil_alim)
+                with col4:
+                    stok_yeterli = len(alim_final_full[alim_final_full['Durum'] == '🟢 Stok Yeterli'])
+                    st.metric("🟢 Yeterli", stok_yeterli)
+                with col5:
                     toplam_alim = alim_final['Alım İhtiyacı'].sum()
                     if toplam_alim >= 1000:
-                        st.metric("🛒 Toplam Alım", f"{toplam_alim/1000:.0f}K")
+                        st.metric("💰 Toplam Alım", f"{toplam_alim/1000:.0f}K")
                     else:
-                        st.metric("🛒 Toplam Alım", f"{toplam_alim:.0f}")
-                with col3:
-                    toplam_deger = alim_final['Alım İhtiyacı'].sum()
-                    if toplam_deger >= 1000000:
-                        st.metric("💰 Tahmini Maliyet", f"{toplam_deger/1000000:.1f}M")
-                    elif toplam_deger >= 1000:
-                        st.metric("💰 Tahmini Maliyet", f"{toplam_deger/1000:.0f}K")
-                    else:
-                        st.metric("💰 Tahmini Maliyet", f"{toplam_deger:.0f}")
-                with col4:
-                    kritik_urun = len(alim_final[alim_final['Alım İhtiyacı'] > alim_final['Alım İhtiyacı'].median()])
-                    st.metric("⚠️ Kritik Ürün", kritik_urun)
+                        st.metric("💰 Toplam Alım", f"{toplam_alim:.0f}")
                 
                 st.markdown("---")
                 
-                # Tablo
-                st.subheader("📋 Alım Sipariş Listesi")
-                st.dataframe(
-                    alim_final.style.format({
-                        'Sevkiyat İhtiyacı': '{:,.0f}',
-                        'Güncel Satış': '{:,.0f}',
-                        'Mağaza Stok': '{:,.0f}',
-                        'Yol': '{:,.0f}',
-                        'Depo Stok': '{:,.0f}',
-                        'Alım İhtiyacı': '{:,.0f}'
-                    }),
-                    use_container_width=True,
-                    height=400
-                )
+                # Detaylı analiz
+                st.subheader("📈 Detaylı Analiz")
+                
+                tab1, tab2, tab3 = st.tabs(["🔴 Acil Alım", "🟡 Alım Gerekli", "🟢 Stok Yeterli"])
+                
+                with tab1:
+                    acil_df = alim_final_full[alim_final_full['Durum'] == '🔴 Acil Alım']
+                    st.write(f"**{len(acil_df)} ürün acil alım gerektiriyor (>1000 adet)**")
+                    if len(acil_df) > 0:
+                        st.dataframe(acil_df[['Ürün Adı', 'Marka', 'Alım İhtiyacı', 'Depo Stok', 'Eldeki Toplam']], 
+                                   use_container_width=True, height=300)
+                
+                with tab2:
+                    gerekli_df = alim_final_full[alim_final_full['Durum'] == '🟡 Alım Gerekli']
+                    st.write(f"**{len(gerekli_df)} ürün alım gerektiriyor (0-1000 adet)**")
+                    if len(gerekli_df) > 0:
+                        st.dataframe(gerekli_df[['Ürün Adı', 'Marka', 'Alım İhtiyacı', 'Depo Stok', 'Eldeki Toplam']], 
+                                   use_container_width=True, height=300)
+                
+                with tab3:
+                    yeterli_df = alim_final_full[alim_final_full['Durum'] == '🟢 Stok Yeterli']
+                    st.write(f"**{len(yeterli_df)} ürün stok yeterli**")
+                    if len(yeterli_df) > 0:
+                        st.dataframe(yeterli_df[['Ürün Adı', 'Marka', 'Eldeki Toplam', 'İhtiyaç Toplam']], 
+                                   use_container_width=True, height=300)
                 
                 st.markdown("---")
                 
                 # En yüksek alım ihtiyacı olan 10 ürün
-                st.subheader("🔝 En Yüksek Alım İhtiyacı Olan 10 Ürün")
-                top_10 = alim_final.head(10)[['Ürün Adı', 'Marka', 'Alım İhtiyacı']]
-                
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.bar_chart(top_10.set_index('Ürün Adı')['Alım İhtiyacı'])
-                with col2:
-                    st.dataframe(top_10, use_container_width=True, height=350)
+                if len(alim_final) > 0:
+                    st.subheader("🔝 En Yüksek Alım İhtiyacı Olan 10 Ürün")
+                    top_10 = alim_final.head(10)[['Ürün Adı', 'Marka', 'Alım İhtiyacı', 'Depo Stok']]
+                    
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.bar_chart(top_10.set_index('Ürün Adı')['Alım İhtiyacı'])
+                    with col2:
+                        st.dataframe(top_10, use_container_width=True, height=350)
                 
                 st.markdown("---")
                 
                 # Marka bazında alım analizi
-                st.subheader("🏷️ Marka Bazında Alım Analizi")
-                marka_analiz = alim_final.groupby('Marka').agg({
-                    'Ürün Kodu': 'count',
-                    'Alım İhtiyacı': 'sum'
-                }).reset_index()
-                marka_analiz.columns = ['Marka', 'Ürün Sayısı', 'Toplam Alım']
-                marka_analiz = marka_analiz.sort_values('Toplam Alım', ascending=False)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.dataframe(
-                        marka_analiz.style.format({
-                            'Toplam Alım': '{:,.0f}'
-                        }),
-                        use_container_width=True,
-                        height=300
-                    )
-                with col2:
-                    st.bar_chart(marka_analiz.set_index('Marka')['Toplam Alım'])
+                if len(alim_final) > 0:
+                    st.subheader("🏷️ Marka Bazında Alım Analizi")
+                    marka_analiz = alim_final.groupby('Marka').agg({
+                        'Ürün Kodu': 'count',
+                        'Alım İhtiyacı': 'sum'
+                    }).reset_index()
+                    marka_analiz.columns = ['Marka', 'Ürün Sayısı', 'Toplam Alım']
+                    marka_analiz = marka_analiz.sort_values('Toplam Alım', ascending=False)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.dataframe(
+                            marka_analiz.style.format({
+                                'Toplam Alım': '{:,.0f}'
+                            }),
+                            use_container_width=True,
+                            height=300
+                        )
+                    with col2:
+                        st.bar_chart(marka_analiz.set_index('Marka')['Toplam Alım'])
                 
                 st.markdown("---")
                 
@@ -1686,36 +1752,29 @@ elif menu == "🛒 Alım Sipariş":
                 
                 with col1:
                     st.download_button(
-                        label="📥 CSV İndir",
-                        data=alim_final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="alim_siparisi.csv",
+                        label="📥 Tüm Ürünler (CSV)",
+                        data=alim_final_full.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="alim_siparisi_tam_liste.csv",
                         mime="text/csv"
                     )
                 
                 with col2:
-                    st.download_button(
-                        label="📥 Excel İndir",
-                        data=alim_final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="alim_siparisi.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                    if len(alim_final) > 0:
+                        st.download_button(
+                            label="📥 Sadece Alım Gerekenler (CSV)",
+                            data=alim_final.to_csv(index=False, encoding='utf-8-sig'),
+                            file_name="alim_siparisi_sadece_alim.csv",
+                            mime="text/csv"
+                        )
                 
                 with col3:
-                    st.download_button(
-                        label="📥 JSON İndir",
-                        data=alim_final.to_json(orient='records', force_ascii=False),
-                        file_name="alim_siparisi.json",
-                        mime="application/json"
-                    )
-                
-                # Kritik ürünler uyarısı
-                if kritik_urun > 0:
-                    st.markdown("---")
-                    st.warning(f"⚠️ **{kritik_urun} ürün kritik seviyede!** Acil alım yapılması önerilir.")
-                    kritik_df = alim_final[alim_final['Alım İhtiyacı'] > alim_final['Alım İhtiyacı'].median()]
-                    st.dataframe(kritik_df[['Ürün Adı', 'Marka', 'Alım İhtiyacı']], use_container_width=True)
-
-
+                    if len(acil_df) > 0:
+                        st.download_button(
+                            label="📥 Sadece Acil Alım (CSV)",
+                            data=acil_df.to_csv(index=False, encoding='utf-8-sig'),
+                            file_name="alim_siparisi_acil.csv",
+                            mime="text/csv"
+                        )
 # ============================================
 # 📈 RAPORLAR
 # ============================================
