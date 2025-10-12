@@ -377,17 +377,26 @@ elif menu == "🎯 Segmentasyon":
     
     # Ürün bazında gruplama
     urun_aggregated = data.groupby('urun_kod').agg({
+        'urun_ad': 'first',
+        'marka_ad': 'first',
         'stok': 'sum',
-        'satis': 'sum'
+        'yol': 'sum',
+        'satis': 'sum',
+        'ciro': 'sum'
     }).reset_index()
     urun_aggregated['stok_satis_orani'] = urun_aggregated['stok'] / urun_aggregated['satis'].replace(0, 1)
+    urun_aggregated['cover'] = urun_aggregated['stok_satis_orani']
     
     # Mağaza bazında gruplama
     magaza_aggregated = data.groupby('magaza_kod').agg({
+        'magaza_ad': 'first',
         'stok': 'sum',
-        'satis': 'sum'
+        'yol': 'sum',
+        'satis': 'sum',
+        'ciro': 'sum'
     }).reset_index()
     magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
+    magaza_aggregated['cover'] = magaza_aggregated['stok_satis_orani']
     
     st.markdown("---")
     
@@ -412,17 +421,95 @@ elif menu == "🎯 Segmentasyon":
                 max_val = st.number_input(f"Aralık {i+1} - Max", value=(i+1)*5 if i < num_ranges-1 else 999, key=f"prod_max_{i}")
             product_ranges.append((min_val, max_val))
     
-    # Ürün segmentasyonunu önizle
+    # Ürün segmentasyonunu uygula
     if urun_aggregated is not None and len(urun_aggregated) > 0:
         temp_prod = urun_aggregated.copy()
+        
+        # Segment labels
+        product_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in product_ranges]
+        
         temp_prod['segment'] = pd.cut(
             temp_prod['stok_satis_orani'], 
             bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
-            labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
+            labels=product_labels,
             include_lowest=True
         )
+        
         st.write("**Ürün Dağılımı Önizleme:**")
-        st.dataframe(temp_prod['segment'].value_counts().sort_index(), use_container_width=True, height=200)
+        segment_dist = temp_prod['segment'].value_counts().sort_index()
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.dataframe(segment_dist, use_container_width=True, height=200)
+        with col2:
+            st.bar_chart(segment_dist)
+        
+        st.markdown("---")
+        
+        # DETAYLI ÜRÜN SEGMENTASYON TABLOSU
+        st.subheader("📋 Detaylı Ürün Segmentasyon Tablosu")
+        
+        # Tabloyu hazırla
+        urun_detail = temp_prod[['urun_kod', 'urun_ad', 'marka_ad', 'segment', 
+                                  'stok', 'yol', 'satis', 'ciro', 'stok_satis_orani']].copy()
+        urun_detail = urun_detail.sort_values(['segment', 'stok_satis_orani'], ascending=[True, False])
+        urun_detail.columns = ['Ürün Kodu', 'Ürün Adı', 'Marka', 'Segment', 
+                               'Toplam Stok', 'Toplam Yol', 'Toplam Satış', 'Toplam Ciro', 'Stok/Satış Oranı']
+        
+        # Segment bazında filtreleme
+        selected_segment_prod = st.multiselect(
+            "Segment Seç (Filtre)",
+            options=product_labels,
+            default=product_labels,
+            key="filter_prod_segment"
+        )
+        
+        filtered_urun = urun_detail[urun_detail['Segment'].isin(selected_segment_prod)]
+        
+        st.write(f"**Toplam {len(filtered_urun)} ürün gösteriliyor**")
+        st.dataframe(
+            filtered_urun.style.format({
+                'Toplam Stok': '{:,.0f}',
+                'Toplam Yol': '{:,.0f}',
+                'Toplam Satış': '{:,.0f}',
+                'Toplam Ciro': '{:,.2f}',
+                'Stok/Satış Oranı': '{:.2f}'
+            }),
+            use_container_width=True,
+            height=400
+        )
+        
+        # Segment bazında özet
+        st.markdown("---")
+        st.subheader("📊 Segment Bazında Ürün Özeti")
+        
+        segment_ozet = urun_detail.groupby('Segment').agg({
+            'Ürün Kodu': 'count',
+            'Toplam Stok': 'sum',
+            'Toplam Satış': 'sum',
+            'Toplam Ciro': 'sum',
+            'Stok/Satış Oranı': 'mean'
+        }).reset_index()
+        segment_ozet.columns = ['Segment', 'Ürün Sayısı', 'Toplam Stok', 'Toplam Satış', 'Toplam Ciro', 'Ort. Cover']
+        
+        st.dataframe(
+            segment_ozet.style.format({
+                'Toplam Stok': '{:,.0f}',
+                'Toplam Satış': '{:,.0f}',
+                'Toplam Ciro': '{:,.2f}',
+                'Ort. Cover': '{:.2f}'
+            }),
+            use_container_width=True
+        )
+        
+        # CSV İndir - ÜRÜN
+        st.download_button(
+            label="📥 Ürün Segmentasyon Detayı İndir (CSV)",
+            data=urun_detail.to_csv(index=False, encoding='utf-8-sig'),
+            file_name="urun_segmentasyon_detay.csv",
+            mime="text/csv",
+            key="download_urun_segment"
+        )
     
     st.markdown("---")
     
@@ -447,26 +534,167 @@ elif menu == "🎯 Segmentasyon":
                 max_val = st.number_input(f"Aralık {i+1} - Max", value=(i+1)*5 if i < num_ranges_store-1 else 999, key=f"store_max_{i}")
             store_ranges.append((min_val, max_val))
     
-    # Mağaza segmentasyonunu önizle
+    # Mağaza segmentasyonunu uygula
     if magaza_aggregated is not None and len(magaza_aggregated) > 0:
         temp_store = magaza_aggregated.copy()
+        
+        # Segment labels
+        store_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in store_ranges]
+        
         temp_store['segment'] = pd.cut(
             temp_store['stok_satis_orani'], 
             bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
-            labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
+            labels=store_labels,
             include_lowest=True
         )
+        
         st.write("**Mağaza Dağılımı Önizleme:**")
-        st.dataframe(temp_store['segment'].value_counts().sort_index(), use_container_width=True, height=200)
+        segment_dist_store = temp_store['segment'].value_counts().sort_index()
+        
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.dataframe(segment_dist_store, use_container_width=True, height=200)
+        with col2:
+            st.bar_chart(segment_dist_store)
+        
+        st.markdown("---")
+        
+        # DETAYLI MAĞAZA SEGMENTASYON TABLOSU
+        st.subheader("📋 Detaylı Mağaza Segmentasyon Tablosu")
+        
+        # Tabloyu hazırla
+        magaza_detail = temp_store[['magaza_kod', 'magaza_ad', 'segment', 
+                                     'stok', 'yol', 'satis', 'ciro', 'stok_satis_orani']].copy()
+        magaza_detail = magaza_detail.sort_values(['segment', 'stok_satis_orani'], ascending=[True, False])
+        magaza_detail.columns = ['Mağaza Kodu', 'Mağaza Adı', 'Segment', 
+                                 'Toplam Stok', 'Toplam Yol', 'Toplam Satış', 'Toplam Ciro', 'Stok/Satış Oranı']
+        
+        # Segment bazında filtreleme
+        selected_segment_store = st.multiselect(
+            "Segment Seç (Filtre)",
+            options=store_labels,
+            default=store_labels,
+            key="filter_store_segment"
+        )
+        
+        filtered_magaza = magaza_detail[magaza_detail['Segment'].isin(selected_segment_store)]
+        
+        st.write(f"**Toplam {len(filtered_magaza)} mağaza gösteriliyor**")
+        st.dataframe(
+            filtered_magaza.style.format({
+                'Toplam Stok': '{:,.0f}',
+                'Toplam Yol': '{:,.0f}',
+                'Toplam Satış': '{:,.0f}',
+                'Toplam Ciro': '{:,.2f}',
+                'Stok/Satış Oranı': '{:.2f}'
+            }),
+            use_container_width=True,
+            height=400
+        )
+        
+        # Segment bazında özet
+        st.markdown("---")
+        st.subheader("📊 Segment Bazında Mağaza Özeti")
+        
+        segment_ozet_magaza = magaza_detail.groupby('Segment').agg({
+            'Mağaza Kodu': 'count',
+            'Toplam Stok': 'sum',
+            'Toplam Satış': 'sum',
+            'Toplam Ciro': 'sum',
+            'Stok/Satış Oranı': 'mean'
+        }).reset_index()
+        segment_ozet_magaza.columns = ['Segment', 'Mağaza Sayısı', 'Toplam Stok', 'Toplam Satış', 'Toplam Ciro', 'Ort. Cover']
+        
+        st.dataframe(
+            segment_ozet_magaza.style.format({
+                'Toplam Stok': '{:,.0f}',
+                'Toplam Satış': '{:,.0f}',
+                'Toplam Ciro': '{:,.2f}',
+                'Ort. Cover': '{:.2f}'
+            }),
+            use_container_width=True
+        )
+        
+        # CSV İndir - MAĞAZA
+        st.download_button(
+            label="📥 Mağaza Segmentasyon Detayı İndir (CSV)",
+            data=magaza_detail.to_csv(index=False, encoding='utf-8-sig'),
+            file_name="magaza_segmentasyon_detay.csv",
+            mime="text/csv",
+            key="download_magaza_segment"
+        )
     
-    if st.button("💾 Segmentasyonu Kaydet", type="primary"):
-        st.session_state.segmentation_params = {
-            'product_ranges': product_ranges,
-            'store_ranges': store_ranges
-        }
-        st.success("✅ Ayarlar kaydedildi!")
+    st.markdown("---")
+    
+    # Kaydet butonu
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("💾 Segmentasyonu Kaydet", type="primary"):
+            st.session_state.segmentation_params = {
+                'product_ranges': product_ranges,
+                'store_ranges': store_ranges
+            }
+            st.success("✅ Ayarlar kaydedildi!")
+    with col2:
         st.info("ℹ️ Kaydetmeseniz de default değerler kullanılacaktır.")
-
+    
+    st.markdown("---")
+    
+    # HER İKİSİNİ BİRLİKTE İNDİR
+    st.subheader("📥 Tüm Segmentasyon Verilerini İndir")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Excel formatında (iki sheet)
+        if st.button("📊 Excel İndir (Ürün + Mağaza)", use_container_width=True):
+            try:
+                import io
+                from io import BytesIO
+                
+                # Excel writer oluştur
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    urun_detail.to_excel(writer, sheet_name='Ürün Segmentasyon', index=False)
+                    magaza_detail.to_excel(writer, sheet_name='Mağaza Segmentasyon', index=False)
+                
+                output.seek(0)
+                
+                st.download_button(
+                    label="⬇️ Excel Dosyasını İndir",
+                    data=output.getvalue(),
+                    file_name="segmentasyon_tam_detay.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except ImportError:
+                st.error("❌ Excel export için 'openpyxl' kütüphanesi gerekli. Lütfen yükleyin: pip install openpyxl")
+    
+    with col2:
+        # ZIP formatında (iki CSV)
+        if st.button("📦 ZIP İndir (2 CSV)", use_container_width=True):
+            import zipfile
+            import io
+            
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                # Ürün CSV
+                urun_csv = urun_detail.to_csv(index=False, encoding='utf-8-sig')
+                zip_file.writestr('urun_segmentasyon.csv', urun_csv.encode('utf-8-sig'))
+                
+                # Mağaza CSV
+                magaza_csv = magaza_detail.to_csv(index=False, encoding='utf-8-sig')
+                zip_file.writestr('magaza_segmentasyon.csv', magaza_csv.encode('utf-8-sig'))
+            
+            zip_buffer.seek(0)
+            
+            st.download_button(
+                label="⬇️ ZIP Dosyasını İndir",
+                data=zip_buffer.getvalue(),
+                file_name="segmentasyon_detay.zip",
+                mime="application/zip"
+            )
+            
 # ============================================
 # 🎲 HEDEF MATRİS
 # ============================================
