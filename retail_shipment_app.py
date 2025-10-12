@@ -361,8 +361,8 @@ elif menu == "📤 Veri Yükleme":
 # ============================================
 # 🎯 SEGMENTASYON AYARLARI
 # ============================================
-elif menu == "🎯 Segmentasyon":
-    st.title("🎯 Segmentasyon")
+elif menu == "🫧 Segmentasyon":
+    st.title("🫧 Segmentasyon")
     st.markdown("---")
     
     st.info("**Stok/Satış oranına göre** ürün ve mağazaları gruplandırma (Toplam Stok / Toplam Satış)")
