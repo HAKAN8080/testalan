@@ -852,8 +852,8 @@ elif menu == "🎲 Hedef Matris":
 # ============================================
 # 📊 SIRALAMA
 # ============================================
-elif menu == "📊 Sıralama":
-    st.title("📊 Sıralama Öncelikleri")
+elif menu == "🔢 Sıralama":
+    st.title("🔢 Sıralama")
     st.markdown("---")
     
     if st.session_state.anlik_stok_satis is None:
