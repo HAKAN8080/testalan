@@ -104,7 +104,7 @@ elif menu == "📤 Veri Yükleme":
     st.title("📤 Veri Yükleme")
     st.markdown("---")
     
-    # Örnek CSV'ler
+    # Örnek CSV'ler (bu kısım aynı kalıyor, değiştirme)
     with st.expander("📥 Örnek CSV'leri İndir", expanded=False):
         st.info("Tüm örnek CSV dosyalarını aşağıdan indirebilirsiniz.")
         
@@ -203,132 +203,185 @@ elif menu == "📤 Veri Yükleme":
     
     st.markdown("---")
     
-    # CSV Yükleme
+    # CSV Yükleme - YENİ SİSTEM
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Ürün Master", "Mağaza Master", "Yasak", "Depo Stok", 
         "Anlık Stok/Satış", "Haftalık Trend", "KPI"
     ])
     
+    # 1. ÜRÜN MASTER - YENİ
     with tab1:
         st.subheader("📦 Ürün Master")
         st.info("Kolonlar: urun_kod, urun_ad, satici_kod, satici_ad, kategori_kod, kategori_ad, umg, umg_ad, mg, mg_ad, marka_kod, marka_ad, nitelik, durum, ithal, ithal_ad, tanim")
-        uploaded = st.file_uploader("Ürün Master CSV yükle", type=['csv'], key="urun_master_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.urun_master = df
-                st.success(f"✅ {len(df)} ürün yüklendi!")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.urun_master is not None:
+        
+        if st.session_state.urun_master is not None:
+            st.success(f"✅ {len(st.session_state.urun_master)} ürün yüklü!")
             st.dataframe(st.session_state.urun_master.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_urun"):
+                st.session_state.urun_master = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Ürün Master CSV yükle", type=['csv'], key="urun_master_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.urun_master = df
+                    st.success(f"✅ {len(df)} ürün yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 2. MAĞAZA MASTER - YENİ
     with tab2:
         st.subheader("🏪 Mağaza Master")
         st.info("Kolonlar: magaza_kod, magaza_ad, il, bolge, tip, adres_kod, sm, bs, depo_kod")
-        uploaded = st.file_uploader("Mağaza Master CSV yükle", type=['csv'], key="magaza_master_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.magaza_master = df
-                st.success(f"✅ {len(df)} mağaza yüklendi!")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.magaza_master is not None:
+        
+        if st.session_state.magaza_master is not None:
+            st.success(f"✅ {len(st.session_state.magaza_master)} mağaza yüklü!")
             st.dataframe(st.session_state.magaza_master.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_magaza"):
+                st.session_state.magaza_master = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Mağaza Master CSV yükle", type=['csv'], key="magaza_master_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.magaza_master = df
+                    st.success(f"✅ {len(df)} mağaza yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 3. YASAK - YENİ
     with tab3:
         st.subheader("🚫 Yasak Master")
         st.info("Kolonlar: urun_kod, urun_ad, magaza_kod, magaza_ad, yasak_durum")
-        uploaded = st.file_uploader("Yasak CSV yükle", type=['csv'], key="yasak_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.yasak_master = df
-                st.success(f"✅ {len(df)} yasak kaydı yüklendi!")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.yasak_master is not None:
+        
+        if st.session_state.yasak_master is not None:
+            st.success(f"✅ {len(st.session_state.yasak_master)} yasak kaydı yüklü!")
             st.dataframe(st.session_state.yasak_master.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_yasak"):
+                st.session_state.yasak_master = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Yasak CSV yükle", type=['csv'], key="yasak_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.yasak_master = df
+                    st.success(f"✅ {len(df)} yasak kaydı yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 4. DEPO STOK - YENİ
     with tab4:
         st.subheader("📦 Depo Stok")
         st.info("Kolonlar: depo_kod, depo_ad, urun_kod, urun_ad, stok")
-        uploaded = st.file_uploader("Depo Stok CSV yükle", type=['csv'], key="depo_stok_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.depo_stok = df
-                st.success(f"✅ {len(df)} depo stok kaydı yüklendi!")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.depo_stok is not None:
+        
+        if st.session_state.depo_stok is not None:
+            st.success(f"✅ {len(st.session_state.depo_stok)} depo stok kaydı yüklü!")
             st.dataframe(st.session_state.depo_stok.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_depo"):
+                st.session_state.depo_stok = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Depo Stok CSV yükle", type=['csv'], key="depo_stok_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.depo_stok = df
+                    st.success(f"✅ {len(df)} depo stok kaydı yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 5. ANLIK STOK SATIŞ - YENİ
     with tab5:
         st.subheader("📊 Anlık Stok/Satış")
         st.info("Kolonlar: magaza_kod, magaza_ad, urun_kod, urun_ad, klasman_kod, klasman_ad, marka_kod, marka_ad, stok, yol, satis, ciro, smm")
-        uploaded = st.file_uploader("Anlık Stok/Satış CSV yükle", type=['csv'], key="anlik_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.anlik_stok_satis = df
-                st.success(f"✅ {len(df)} kayıt yüklendi!")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Toplam Mağaza", df['magaza_kod'].nunique())
-                with col2:
-                    st.metric("Toplam Ürün", df['urun_kod'].nunique())
-                with col3:
-                    st.metric("Ortalama SMM", f"{df['smm'].mean():.2f}")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.anlik_stok_satis is not None:
+        
+        if st.session_state.anlik_stok_satis is not None:
+            st.success(f"✅ {len(st.session_state.anlik_stok_satis)} kayıt yüklü!")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Toplam Mağaza", st.session_state.anlik_stok_satis['magaza_kod'].nunique())
+            with col2:
+                st.metric("Toplam Ürün", st.session_state.anlik_stok_satis['urun_kod'].nunique())
+            with col3:
+                st.metric("Ortalama SMM", f"{st.session_state.anlik_stok_satis['smm'].mean():.2f}")
             st.dataframe(st.session_state.anlik_stok_satis.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_anlik"):
+                st.session_state.anlik_stok_satis = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Anlık Stok/Satış CSV yükle", type=['csv'], key="anlik_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.anlik_stok_satis = df
+                    st.success(f"✅ {len(df)} kayıt yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 6. HAFTALIK TREND - YENİ
     with tab6:
         st.subheader("📈 Haftalık Trend")
         st.info("Kolonlar: klasman_kod, klasman_ad, marka_kod, marka_ad, yil, hafta, stok, satis, ciro, smm, iftutar")
-        uploaded = st.file_uploader("Haftalık Trend CSV yükle", type=['csv'], key="haftalik_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.haftalik_trend = df
-                st.success(f"✅ {len(df)} haftalık veri yüklendi!")
-                st.dataframe(df.head(10), use_container_width=True, height=400)
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
-        elif st.session_state.haftalik_trend is not None:
+        
+        if st.session_state.haftalik_trend is not None:
+            st.success(f"✅ {len(st.session_state.haftalik_trend)} haftalık veri yüklü!")
             st.dataframe(st.session_state.haftalik_trend.head(10), use_container_width=True, height=400)
+            if st.button("🔄 Yeni Dosya Yükle", key="reload_haftalik"):
+                st.session_state.haftalik_trend = None
+                st.rerun()
+        else:
+            uploaded = st.file_uploader("Haftalık Trend CSV yükle", type=['csv'], key="haftalik_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.haftalik_trend = df
+                    st.success(f"✅ {len(df)} haftalık veri yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
     
+    # 7. KPI - YENİ
     with tab7:
         st.subheader("🎯 KPI Parametreleri")
         st.info("Kolonlar: mg_id, mg_ad, min_deger, max_deger, forward_cover")
-        uploaded = st.file_uploader("KPI CSV yükle", type=['csv'], key="kpi_upload")
-        if uploaded:
-            try:
-                df = pd.read_csv(uploaded)
-                st.session_state.kpi = df
-                st.success(f"✅ {len(df)} KPI kaydı yüklendi!")
-            except Exception as e:
-                st.error(f"❌ Hata: {str(e)}")
         
         if st.session_state.kpi is not None:
+            st.success(f"✅ {len(st.session_state.kpi)} KPI kaydı yüklü!")
             edited_df = st.data_editor(
                 st.session_state.kpi,
                 num_rows="dynamic",
                 use_container_width=True,
                 height=300
             )
-            if st.button("💾 Değişiklikleri Kaydet", key="save_kpi"):
-                st.session_state.kpi = edited_df
-                st.success("✅ Kaydedildi!")
-                st.rerun()
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.button("💾 Değişiklikleri Kaydet", key="save_kpi"):
+                    st.session_state.kpi = edited_df
+                    st.success("✅ Kaydedildi!")
+                    st.rerun()
+            with col2:
+                if st.button("🔄 Yeni Dosya Yükle", key="reload_kpi"):
+                    st.session_state.kpi = None
+                    st.rerun()
+        else:
+            uploaded = st.file_uploader("KPI CSV yükle", type=['csv'], key="kpi_upload")
+            if uploaded:
+                try:
+                    df = pd.read_csv(uploaded)
+                    st.session_state.kpi = df
+                    st.success(f"✅ {len(df)} KPI kaydı yüklendi!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Hata: {str(e)}")
+                    
 # ============================================
 # 🎯 SEGMENTASYON AYARLARI
 # ============================================
