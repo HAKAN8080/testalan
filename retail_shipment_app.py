@@ -1497,22 +1497,7 @@ elif menu == "💵 Alım Sipariş":
     else:
         st.success("✅ Tüm veriler hazır! Alım sipariş hesaplaması yapılabilir.")
         
-        st.markdown("### 📋 Alım Sipariş Formülü")
-        st.info("""
-        **Formül:** `Alım İhtiyacı = İhtiyaç + (2 × Satış) - (Stok + Yol + Depo Stok)`
-        
-        **Açıklama:**
-        - **İhtiyaç:** Mağazaların güncel ihtiyacı (sevkiyat hesaplamasından)
-        - **2 × Satış:** Güvenlik stoku (satış hızına göre buffer)
-        - **Stok:** Mağazalardaki mevcut stok
-        - **Yol:** Yoldaki ürünler
-        - **Depo Stok:** Depodaki mevcut stok
-        
-        **Sonuç:** > 0 ise alım yapılmalı, ≤ 0 ise stok yeterli
-        """)
-        
-        st.markdown("---")
-        
+    
         # Hesaplama butonu
         if st.button("🚀 Alım Sipariş Hesapla", type="primary", use_container_width=True):
             with st.spinner("📊 Alım ihtiyaçları hesaplanıyor..."):
