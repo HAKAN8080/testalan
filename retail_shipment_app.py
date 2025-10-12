@@ -1477,7 +1477,7 @@ elif menu == "📐 Hesaplama":
 # ============================================
 # 🛒 ALIM SİPARİŞ HAZIRLA
 # ============================================
-elif menu == "🛒 Alım Sipariş":
+elif menu == "💵 Alım Sipariş":
     st.title("🛒 Alım Sipariş Hazırlama")
     st.markdown("---")
     
