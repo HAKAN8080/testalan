@@ -95,9 +95,11 @@ if menu == "🏠 Ana Sayfa":
     2. **Segmentasyon**: Ürün ve mağaza gruplama aralıklarını belirleyin (opsiyonel)
     3. **Hedef Matris**: Her segment için parametreleri girin (opsiyonel)
     4. **Sıralama**: Öncelikleri belirleyin (opsiyonel)
-    5. **Hesaplama**: Sonuçları görüntüleyin
+    5. **Hesaplama**: Sevkiyat sonuçlarını görüntüleyin
+    6. **Alım Sipariş**: Tedarikçiden alınması gereken ürünleri hesaplayın
+    7. **Raporlar**: Detaylı analizleri inceleyin
     """)
-
+    
 # ============================================
 # 📤 VERİ YÜKLEME
 # ============================================
