@@ -1113,31 +1113,46 @@ elif menu == "🚚 Hesaplama":
                 st.markdown("---")
                 st.subheader("📊 Sevkiyat Sonuçları")
                 
-                # Metrikler - İlk satır
+                # Metrikler - İlk satır (KÜÇÜLTÜLMÜŞ - %60 boyut)
                 col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
                 
                 with col1:
-                    st.metric("⏱️ Süre", f"{calculation_time:.1f}s")
+                    st.metric("⏱️", f"{calculation_time:.1f}s", "Süre")
                 with col2:
-                    st.metric("📦 İhtiyaç", f"{result_final['ihtiyac_miktari'].sum():,.0f}")
+                    ihtiyac_val = result_final['ihtiyac_miktari'].sum()
+                    if ihtiyac_val >= 1000:
+                        st.metric("📦", f"{ihtiyac_val/1000:.0f}K", "İhtiyaç")
+                    else:
+                        st.metric("📦", f"{ihtiyac_val:.0f}", "İhtiyaç")
                 with col3:
-                    st.metric("✅ Sevk", f"{result_final['sevkiyat_miktari'].sum():,.0f}")
+                    sevk_val = result_final['sevkiyat_miktari'].sum()
+                    if sevk_val >= 1000:
+                        st.metric("✅", f"{sevk_val/1000:.0f}K", "Sevk")
+                    else:
+                        st.metric("✅", f"{sevk_val:.0f}", "Sevk")
                 with col4:
                     sku_count = result_final[result_final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
-                    st.metric("🏷️ SKU", f"{sku_count:,}")
+                    st.metric("🏷️", f"{sku_count}", "SKU")
                 with col5:
                     magaza_count = result_final[result_final['sevkiyat_miktari'] > 0]['magaza_kod'].nunique()
-                    st.metric("🏪 Mağaza", f"{magaza_count:,}")
+                    st.metric("🏪", f"{magaza_count}", "Mağaza")
                 with col6:
                     sevk_per_magaza = result_final['sevkiyat_miktari'].sum() / magaza_count if magaza_count > 0 else 0
-                    st.metric("📊 Sevk/Mğz", f"{sevk_per_magaza:,.0f}")
+                    if sevk_per_magaza >= 1000:
+                        st.metric("📊", f"{sevk_per_magaza/1000:.1f}K", "Sevk/Mğz")
+                    else:
+                        st.metric("📊", f"{sevk_per_magaza:.0f}", "Sevk/Mğz")
                 with col7:
-                    st.metric("⚠️ SK", f"{result_final['stok_yoklugu_satis_kaybi'].sum():,.0f}")
+                    sk_val = result_final['stok_yoklugu_satis_kaybi'].sum()
+                    if sk_val >= 1000:
+                        st.metric("⚠️", f"{sk_val/1000:.0f}K", "SK")
+                    else:
+                        st.metric("⚠️", f"{sk_val:.0f}", "SK")
                 with col8:
                     sk_oran = (result_final['stok_yoklugu_satis_kaybi'].sum() / result_final['ihtiyac_miktari'].sum() * 100) if result_final['ihtiyac_miktari'].sum() > 0 else 0
-                    st.metric("📉 SK%", f"{sk_oran:.1f}%")
+                    st.metric("📉", f"{sk_oran:.1f}%", "SK%")
                 
-                # Metrikler - İkinci satır
+                # Metrikler - İkinci satır (KÜÇÜLTÜLMÜŞ - %60 boyut)
                 st.markdown("---")
                 col1, col2, col3, col4, col5, col6 = st.columns(6)
                 
@@ -1147,23 +1162,31 @@ elif menu == "🚚 Hesaplama":
                 toplam_sevk = result_final['sevkiyat_miktari'].sum()
                 
                 with col1:
-                    st.metric("🚀 RPT Sevk", f"{rpt_sevk:,.0f}")
+                    if rpt_sevk >= 1000:
+                        st.metric("🚀", f"{rpt_sevk/1000:.0f}K", "RPT")
+                    else:
+                        st.metric("🚀", f"{rpt_sevk:.0f}", "RPT")
                 with col2:
                     rpt_oran = (rpt_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("RPT %", f"{rpt_oran:.1f}%")
+                    st.metric("", f"{rpt_oran:.1f}%", "RPT %")
                 with col3:
-                    st.metric("🆕 Initial", f"{initial_sevk:,.0f}")
+                    if initial_sevk >= 1000:
+                        st.metric("🆕", f"{initial_sevk/1000:.0f}K", "Initial")
+                    else:
+                        st.metric("🆕", f"{initial_sevk:.0f}", "Initial")
                 with col4:
                     initial_oran = (initial_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("Initial %", f"{initial_oran:.1f}%")
+                    st.metric("", f"{initial_oran:.1f}%", "Init %")
                 with col5:
-                    st.metric("📌 Min", f"{min_sevk:,.0f}")
+                    if min_sevk >= 1000:
+                        st.metric("📌", f"{min_sevk/1000:.0f}K", "Min")
+                    else:
+                        st.metric("📌", f"{min_sevk:.0f}", "Min")
                 with col6:
                     min_oran = (min_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("Min %", f"{min_oran:.1f}%")
+                    st.metric("", f"{min_oran:.1f}%", "Min %")
                 
                 st.markdown("---")
-                st.dataframe(result_final, use_container_width=True, height=400)
                 
                 # Stok yokluğu raporu
                 st.markdown("---")
