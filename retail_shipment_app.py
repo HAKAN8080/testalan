@@ -1619,22 +1619,22 @@ elif menu == "💵 Alım Sipariş":
             
             st.info(f"⚠️ **{(urun_ihtiyac['kalan_ihtiyac'] > 0).sum()} ürün** için kalan ihtiyaç var")
             
-            # ✅ DEPO STOĞU EKLE
+            # ✅ DEPO STOĞU EKLE - BU BÖLÜMÜ TAMAMEN DEĞİŞTİR
             st.info("📦 **Adım 3:** Depo stok durumu kontrol ediliyor...")
             
             depo_stok_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
             depo_stok_toplam.columns = ['urun_kod', 'depo_stok']
             
-            # ✅ DİKKAT: urun_ihtiyac'a merge et (filtered değil!)
+            # ✅ MERGE: urun_ihtiyac üzerine ekle (filtered değil!)
             urun_ihtiyac = urun_ihtiyac.merge(depo_stok_toplam, on='urun_kod', how='left')
             urun_ihtiyac['depo_stok'] = urun_ihtiyac['depo_stok'].fillna(0)
             
-            # ✅ ALIM SİPARİŞ = Kalan İhtiyaç - Depo Stok
+            # ✅ ALIM SİPARİŞ HESAPLA
             urun_ihtiyac['alim_siparis_miktari'] = (
                 urun_ihtiyac['kalan_ihtiyac'] - urun_ihtiyac['depo_stok']
             ).clip(lower=0)
             
-            # ✅ ŞİMDİ FİLTRELE: Sadece kalan ihtiyacı > 0 olanlar
+            # ✅ FİLTRELE: Sadece kalan ihtiyacı > 0 olanlar
             urun_ihtiyac_filtered = urun_ihtiyac[urun_ihtiyac['kalan_ihtiyac'] > 0].copy()
             
             # Ürün detaylarını ekle
@@ -1642,12 +1642,12 @@ elif menu == "💵 Alım Sipariş":
             for col in ['urun_ad', 'marka_ad', 'mg_ad']:
                 if col in urun_master.columns:
                     available_cols.append(col)
-            
+
             urun_ihtiyac_filtered = urun_ihtiyac_filtered.merge(urun_master[available_cols], on='urun_kod', how='left')
-            
+
             if 'urun_ad' not in urun_ihtiyac_filtered.columns:
                 urun_ihtiyac_filtered['urun_ad'] = "Ürün " + urun_ihtiyac_filtered['urun_kod']
-            
+
             
             # ✅ KALAN İHTİYAÇ
             urun_ihtiyac['kalan_ihtiyac'] = (
