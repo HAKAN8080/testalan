@@ -60,7 +60,7 @@ menu = st.sidebar.radio(
 # 🏠 ANA SAYFA
 # ============================================
 if menu == "🏠 Ana Sayfa":
-    st.title("🏠 AR4U - Thorius Sezon İçi Agent")
+    st.title("🏠 AR4U - Thorius Planlama Sistemi")
     st.markdown("---")
     
     col1, col2, col3, col4 = st.columns(4)
