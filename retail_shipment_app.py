@@ -63,32 +63,7 @@ if menu == "🏠 Ana Sayfa":
     st.title("🏠 AR4U - Thorius Planlama Sistemi")
     st.markdown("---")
     
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Ürün Master", 
-            len(st.session_state.urun_master) if st.session_state.urun_master is not None else 0
-        )
-    
-    with col2:
-        st.metric(
-            "Mağaza Master", 
-            len(st.session_state.magaza_master) if st.session_state.magaza_master is not None else 0
-        )
-    
-    with col3:
-        st.metric(
-            "Anlık Stok/Satış", 
-            "✅" if st.session_state.anlik_stok_satis is not None else "❌"
-        )
-    
-    with col4:
-        st.metric(
-            "Matris Durumu",
-            "✅" if st.session_state.target_matrix is not None else "❌"
-        )
-    
+   
     st.markdown("### 📋 İşlem Adımları")
     st.info("""
     1. **Veri Yükleme**: Tüm CSV dosyalarını yükleyin
