@@ -1575,7 +1575,7 @@ elif menu == "💵 Alım Sipariş":
             
             # 3. KALAN İHTİYAÇ HESAPLA
             urun_ihtiyac['kalan_ihtiyac'] = (
-                urun_ihtiyac['toplam_ihtiyaç'] - 
+                urun_ihtiyac['toplam_ihtiyac'] - 
                 (urun_ihtiyac['stok'] + urun_ihtiyac['yol'] + urun_ihtiyac['gerceklesen_sevkiyat'])
             ).clip(lower=0)
             
