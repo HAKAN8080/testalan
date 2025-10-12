@@ -2110,28 +2110,6 @@ elif menu == "💾 Master Data":
                 
                 st.markdown("---")
                 
-                # Kolonlar hakkında bilgi
-                st.subheader("📋 Yeni Kolonlar Açıklaması")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("""
-                    **🆕 Eklenen Kolonlar:**
-                    - **ihtiyac:** Hesaplanan sevkiyat ihtiyacı
-                    - **sevkiyat:** Gerçekleşen sevkiyat miktarı
-                    - **tip:** Sevkiyat tipi (RPT/Initial/Min)
-                    """)
-                
-                with col2:
-                    st.markdown("""
-                    **🆕 Eklenen Kolonlar (devam):**
-                    - **oncelik:** Sevkiyat öncelik sırası
-                    - **depo_stok:** İlgili depodaki ürün stoku
-                    - **alim_ihtiyaci:** Tedarikçiden alınması gereken
-                    """)
-                
-                st.markdown("---")
-                
                 # İstatistikler
                 st.subheader("📊 Detaylı İstatistikler")
                 
