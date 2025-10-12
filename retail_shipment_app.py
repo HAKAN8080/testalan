@@ -963,8 +963,8 @@ elif menu == "🔢 Sıralama":
 # ============================================
 # 🚚 HESAPLAMA
 # ============================================
-elif menu == "🚚 Hesaplama":
-    st.title("🚚 Hesaplama")
+elif menu == "📐 Hesaplama":
+    st.title("📐 Hesaplama")
     st.markdown("---")
     
     required_data = {
