@@ -98,6 +98,7 @@ if menu == "🏠 Ana Sayfa":
     5. **Hesaplama**: Sevkiyat sonuçlarını görüntüleyin
     6. **Alım Sipariş**: Tedarikçiden alınması gereken ürünleri hesaplayın
     7. **Raporlar**: Detaylı analizleri inceleyin
+    8. **Master Data**: Tüm verileri tek CSV'de birleştirin
     """)
     
 # ============================================
