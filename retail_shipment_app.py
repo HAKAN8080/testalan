@@ -53,7 +53,7 @@ menu = st.sidebar.radio(
     "Menü",
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
      "🎲 Hedef Matris", "📊 Sıralama", "🚚 Hesaplama", "🛒 Alım Sipariş", "📈 Raporlar", "💾 Master Data"]
-
+st.sidebar.markdown("---")
 )
 
 # ============================================
