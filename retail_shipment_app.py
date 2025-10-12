@@ -283,13 +283,11 @@ elif menu == "📤 Veri Yükleme":
         
         if st.session_state.anlik_stok_satis is not None:
             st.success(f"✅ {len(st.session_state.anlik_stok_satis)} kayıt yüklü!")
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.metric("Toplam Mağaza", st.session_state.anlik_stok_satis['magaza_kod'].nunique())
             with col2:
                 st.metric("Toplam Ürün", st.session_state.anlik_stok_satis['urun_kod'].nunique())
-            with col3:
-                st.metric("Ortalama SMM", f"{st.session_state.anlik_stok_satis['smm'].mean():.2f}")
             st.dataframe(st.session_state.anlik_stok_satis.head(10), use_container_width=True, height=400)
             if st.button("🔄 Yeni Dosya Yükle", key="reload_anlik"):
                 st.session_state.anlik_stok_satis = None
