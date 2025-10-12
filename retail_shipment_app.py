@@ -1476,9 +1476,143 @@ elif menu == "📐 Hesaplama":
 
 
             # 🛒 ALIM SİPARİŞ HAZIRLA - DÜZELTİLMİŞ VERSİYON
-
+            # ============================================
+# 🛒 ALIM SİPARİŞ HAZIRLA - DÜZELTİLMİŞ VERSİYON
+# ============================================
+elif menu == "💵 Alım Sipariş":
+    st.title("🛒 Alım Sipariş Hazırlama")
+    st.markdown("---")
+    
+    # Veri kontrolü
+    required_data = {
+        "Ürün Master": st.session_state.urun_master,
+        "Anlık Stok/Satış": st.session_state.anlik_stok_satis,
+        "Depo Stok": st.session_state.depo_stok,
+        "Sevkiyat Sonucu": st.session_state.sevkiyat_sonuc,
+        "KPI": st.session_state.kpi
+    }
+    
+    missing_data = [name for name, data in required_data.items() if data is None]
+    
+    if missing_data:
+        st.warning("⚠️ Alım sipariş hesaplaması için gerekli veriler eksik!")
+        st.error(f"**Eksik veriler:** {', '.join(missing_data)}")
+        
+        if "Sevkiyat Sonucu" in missing_data:
+            st.markdown("---")
+            st.error("🚨 **ÖNEMLİ:** Alım sipariş hesaplaması için **önce sevkiyat hesaplaması yapılmalıdır!**")
+            st.info("""
+            **Neden?**
             
-            # ✅ DEBUG BİLGİLERİ
+            Alım sipariş mantığı şu şekilde çalışır:
+            
+            1. **Hesaplama** menüsünden sevkiyat hesaplanır
+            2. İhtiyaçlar belirlenir ve depodan karşılanır
+            3. **Kalan İhtiyaç** = Toplam İhtiyaç - Gerçekleşen Sevkiyat
+            4. **Alım Sipariş** = Kalan İhtiyaç - Depo Stok
+            """)
+        st.stop()
+    
+    # Hesaplama butonu
+    if st.button("🚀 Alım Sipariş Hesapla", type="primary", use_container_width=True):
+        with st.spinner("📊 Karşılanamayan ihtiyaçlar hesaplanıyor..."):
+            
+            # Verileri hazırla
+            anlik_df = st.session_state.anlik_stok_satis.copy()
+            sevkiyat_df = st.session_state.sevkiyat_sonuc.copy()
+            depo_df = st.session_state.depo_stok.copy()
+            urun_master = st.session_state.urun_master.copy()
+            kpi_df = st.session_state.kpi.copy()
+            
+            # Veri tiplerini düzelt
+            anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
+            sevkiyat_df['urun_kod'] = sevkiyat_df['urun_kod'].astype(str)
+            depo_df['urun_kod'] = depo_df['urun_kod'].astype(str).apply(
+                lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+            )
+            urun_master['urun_kod'] = urun_master['urun_kod'].astype(str).apply(
+                lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+            )
+            
+            # 1. TÜM ÜRÜNLER İÇİN İHTİYAÇ HESAPLA
+            st.info("📦 **Adım 1:** Tüm ürünler için ihtiyaç hesaplanıyor...")
+            
+            # Ürün bazında toplam stok/satış
+            urun_ihtiyac = anlik_df.groupby('urun_kod').agg({
+                'stok': 'sum',
+                'yol': 'sum',
+                'satis': 'sum'
+            }).reset_index()
+            
+            # KPI'dan forward cover al
+            if 'mg' in urun_master.columns:
+                urun_master['mg'] = urun_master['mg'].fillna(0).astype(float).astype(int).astype(str)
+                urun_ihtiyac = urun_ihtiyac.merge(urun_master[['urun_kod', 'mg']], on='urun_kod', how='left')
+                
+                kpi_data = kpi_df[['mg_id', 'forward_cover']].rename(columns={'mg_id': 'mg'})
+                kpi_data['mg'] = kpi_data['mg'].astype(str)
+                urun_ihtiyac['mg'] = urun_ihtiyac['mg'].astype(str)
+                urun_ihtiyac = urun_ihtiyac.merge(kpi_data, on='mg', how='left')
+            
+            default_fc = kpi_df['forward_cover'].mean() if len(kpi_df) > 0 else 2.0
+            urun_ihtiyac['forward_cover'] = urun_ihtiyac.get('forward_cover', default_fc).fillna(default_fc)
+            
+            # Toplam ihtiyaç hesapla
+            urun_ihtiyac['toplam_ihtiyac'] = (
+                urun_ihtiyac['forward_cover'] * urun_ihtiyac['satis']
+            ).clip(lower=0)
+            
+            # 2. GERÇEKLEŞEN SEVKİYATI EKLE
+            st.info("📦 **Adım 2:** Gerçekleşen sevkiyatlar birleştiriliyor...")
+            
+            gerceklesen_sevkiyat = sevkiyat_df.groupby('urun_kod').agg({
+                'sevkiyat_miktari': 'sum'
+            }).reset_index()
+            gerceklesen_sevkiyat.columns = ['urun_kod', 'gerceklesen_sevkiyat']
+            
+            urun_ihtiyac = urun_ihtiyac.merge(gerceklesen_sevkiyat, on='urun_kod', how='left')
+            urun_ihtiyac['gerceklesen_sevkiyat'] = urun_ihtiyac['gerceklesen_sevkiyat'].fillna(0)
+            
+            # 3. KALAN İHTİYAÇ HESAPLA
+            urun_ihtiyac['kalan_ihtiyac'] = (
+                urun_ihtiyac['toplam_ihtiyaç'] - 
+                (urun_ihtiyac['stok'] + urun_ihtiyac['yol'] + urun_ihtiyac['gerceklesen_sevkiyat'])
+            ).clip(lower=0)
+            
+            # 4. DEPO STOĞU EKLE - HATA DÜZELTME BURADA
+            st.info("📦 **Adım 3:** Depo stok durumu kontrol ediliyor...")
+            
+            depo_stok_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
+            depo_stok_toplam.columns = ['urun_kod', 'depo_stok']
+            
+            # Merge işlemini düzgün yap
+            urun_ihtiyac = urun_ihtiyac.merge(depo_stok_toplam, on='urun_kod', how='left')
+            urun_ihtiyac['depo_stok'] = urun_ihtiyac['depo_stok'].fillna(0)
+            
+            # 5. ALIM SİPARİŞ HESAPLA
+            urun_ihtiyac['alim_siparis_miktari'] = (
+                urun_ihtiyac['kalan_ihtiyac'] - urun_ihtiyac['depo_stok']
+            ).clip(lower=0)
+            
+            # 6. FİLTRELE: Sadece kalan ihtiyacı > 0 olanlar
+            urun_ihtiyac_filtered = urun_ihtiyac[urun_ihtiyac['kalan_ihtiyac'] > 0].copy()
+            
+            # 7. ÜRÜN DETAYLARINI EKLE
+            available_cols = ['urun_kod']
+            for col in ['urun_ad', 'marka_ad', 'mg_ad']:
+                if col in urun_master.columns:
+                    available_cols.append(col)
+
+            urun_ihtiyac_filtered = urun_ihtiyac_filtered.merge(
+                urun_master[available_cols], 
+                on='urun_kod', 
+                how='left'
+            )
+
+            if 'urun_ad' not in urun_ihtiyac_filtered.columns:
+                urun_ihtiyac_filtered['urun_ad'] = "Ürün " + urun_ihtiyac_filtered['urun_kod']
+
+            # 8. DEBUG BİLGİLERİ
             st.markdown("---")
             st.write("🔍 **Debug Bilgileri:**")
             col1, col2, col3, col4 = st.columns(4)
@@ -1495,7 +1629,9 @@ elif menu == "📐 Hesaplama":
                 toplam_alim = urun_ihtiyac_filtered['alim_siparis_miktari'].sum()
                 st.metric("Toplam Alım Sipariş", f"{toplam_alim:,.0f}")
             
-            st.markdown("---")
+            # DEVAM EDEN KOD... (kalan kısım aynı)
+            
+           
             
             # ✅ DEPO DURUMU ANALİZİ
             depo_yeter = urun_ihtiyac_filtered[urun_ihtiyac_filtered['depo_stok'] >= urun_ihtiyac_filtered['kalan_ihtiyac']]
