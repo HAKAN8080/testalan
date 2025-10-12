@@ -1636,6 +1636,7 @@ elif menu == "💵 Alım Sipariş":
                     urun_toplam['forward_ihtiyac'] + 
                     urun_toplam['guvenlik_stoku'] - 
                     urun_toplam['eldeki_toplam']
+                ).clip(lower=0)
                 )
                 
                 # DEBUG Bilgileri
