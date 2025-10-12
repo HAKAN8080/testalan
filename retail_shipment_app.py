@@ -1720,3 +1720,335 @@ elif menu == "📈 Raporlar":
                 )
             else:
                 st.success("✅ Hiç stok yokluğu kaynaklı satış kaybı yok!")
+# ============================================
+# 💾 MASTER DATA OLUŞTURMA
+# ============================================
+elif menu == "💾 Master Data":
+    st.title("💾 Master Data Oluşturma")
+    st.markdown("---")
+    
+    st.info("""
+    **Master Data Nedir?**
+    
+    Anlık Stok/Satış CSV'sine aşağıdaki kolonları ekleyerek tek bir master dosya oluşturur:
+    - **ihtiyac:** Hesaplanan sevkiyat ihtiyacı
+    - **sevkiyat:** Gerçekleşen sevkiyat miktarı
+    - **tip:** Sevkiyat tipi (RPT, Initial, Min)
+    - **alim_ihtiyaci:** Tedarikçiden alınması gereken miktar
+    - **depo_stok:** İlgili depodaki ürün stoku
+    - **oncelik:** Sevkiyat öncelik sırası
+    
+    Bu dosya ile tüm verilerinizi tek CSV'de tutabilirsiniz.
+    """)
+    
+    st.markdown("---")
+    
+    # Veri kontrolü
+    if st.session_state.anlik_stok_satis is None:
+        st.error("❌ Anlık Stok/Satış verisi yüklenmemiş!")
+        st.info("Lütfen önce 'Veri Yükleme' bölümünden Anlık Stok/Satış CSV'sini yükleyin.")
+    else:
+        # Hesaplama ve Alım Sipariş durumunu kontrol et
+        hesaplama_yapildi = st.session_state.sevkiyat_sonuc is not None
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if hesaplama_yapildi:
+                st.success("✅ Sevkiyat hesaplaması yapılmış")
+            else:
+                st.warning("⚠️ Sevkiyat hesaplaması yapılmamış")
+        
+        with col2:
+            if st.session_state.depo_stok is not None:
+                st.success("✅ Depo stok verisi mevcut")
+            else:
+                st.warning("⚠️ Depo stok verisi yok")
+        
+        st.markdown("---")
+        
+        if st.button("🚀 Master Data Oluştur", type="primary", use_container_width=True):
+            with st.spinner("📊 Master data hazırlanıyor..."):
+                
+                # Base data
+                master_df = st.session_state.anlik_stok_satis.copy()
+                
+                # Veri tiplerini düzelt
+                master_df['urun_kod'] = master_df['urun_kod'].astype(str)
+                master_df['magaza_kod'] = master_df['magaza_kod'].astype(str)
+                
+                # Yeni kolonları başlat
+                master_df['ihtiyac'] = 0
+                master_df['sevkiyat'] = 0
+                master_df['tip'] = ''
+                master_df['oncelik'] = 0
+                master_df['alim_ihtiyaci'] = 0
+                master_df['depo_stok'] = 0
+                
+                # 1. SEVKIYAT VERİLERİNİ EKLE
+                if hesaplama_yapildi:
+                    sevkiyat_df = st.session_state.sevkiyat_sonuc.copy()
+                    sevkiyat_df['urun_kod'] = sevkiyat_df['urun_kod'].astype(str)
+                    sevkiyat_df['magaza_kod'] = sevkiyat_df['magaza_kod'].astype(str)
+                    
+                    # Sevkiyat verilerini merge et
+                    master_df = master_df.merge(
+                        sevkiyat_df[['magaza_kod', 'urun_kod', 'ihtiyac_miktari', 'sevkiyat_miktari', 'durum', 'oncelik']],
+                        on=['magaza_kod', 'urun_kod'],
+                        how='left',
+                        suffixes=('', '_sevk')
+                    )
+                    
+                    # Kolonları güncelle
+                    master_df['ihtiyac'] = master_df['ihtiyac_miktari'].fillna(0)
+                    master_df['sevkiyat'] = master_df['sevkiyat_miktari'].fillna(0)
+                    master_df['tip'] = master_df['durum'].fillna('')
+                    master_df['oncelik'] = master_df['oncelik'].fillna(0)
+                    
+                    # Gereksiz kolonları sil
+                    master_df = master_df.drop(['ihtiyac_miktari', 'sevkiyat_miktari', 'durum'], axis=1, errors='ignore')
+                
+                # 2. DEPO STOK VERİSİNİ EKLE
+                if st.session_state.depo_stok is not None:
+                    depo_df = st.session_state.depo_stok.copy()
+                    depo_df['urun_kod'] = depo_df['urun_kod'].astype(str).apply(
+                        lambda x: str(int(float(x))) if '.' in str(x) else str(x)
+                    )
+                    
+                    # Ürün bazında toplam depo stok
+                    depo_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
+                    depo_toplam.columns = ['urun_kod', 'depo_stok_toplam']
+                    
+                    master_df = master_df.merge(depo_toplam, on='urun_kod', how='left')
+                    master_df['depo_stok'] = master_df['depo_stok_toplam'].fillna(0)
+                    master_df = master_df.drop('depo_stok_toplam', axis=1, errors='ignore')
+                
+                # 3. ALIM İHTİYACI HESAPLA (Ürün bazında)
+                # Ürün bazında toplamlar
+                urun_toplam = master_df.groupby('urun_kod').agg({
+                    'stok': 'sum',
+                    'yol': 'sum',
+                    'satis': 'sum',
+                    'ihtiyac': 'sum',
+                    'depo_stok': 'first'  # Her satırda aynı olacak
+                }).reset_index()
+                
+                # Alım ihtiyacı formülü: İhtiyaç + (2×Satış) - (Stok+Yol+Depo)
+                urun_toplam['alim_ihtiyaci_hesap'] = (
+                    urun_toplam['ihtiyac'] + 
+                    (2 * urun_toplam['satis']) - 
+                    (urun_toplam['stok'] + urun_toplam['yol'] + urun_toplam['depo_stok'])
+                ).clip(lower=0)  # Negatif değerleri 0 yap
+                
+                # Master'a merge et
+                master_df = master_df.merge(
+                    urun_toplam[['urun_kod', 'alim_ihtiyaci_hesap']],
+                    on='urun_kod',
+                    how='left'
+                )
+                master_df['alim_ihtiyaci'] = master_df['alim_ihtiyaci_hesap'].fillna(0)
+                master_df = master_df.drop('alim_ihtiyaci_hesap', axis=1, errors='ignore')
+                
+                # Kolonları yeniden düzenle (orijinal sıra + yeni kolonlar)
+                original_cols = [col for col in st.session_state.anlik_stok_satis.columns if col in master_df.columns]
+                new_cols = ['ihtiyac', 'sevkiyat', 'tip', 'oncelik', 'depo_stok', 'alim_ihtiyaci']
+                
+                final_cols = original_cols + new_cols
+                master_df = master_df[final_cols]
+                
+                st.success("✅ Master Data oluşturuldu!")
+                st.balloons()
+                
+                # Sonuçlar
+                st.markdown("---")
+                st.subheader("📊 Master Data Özeti")
+                
+                # Metrikler
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("📦 Toplam Satır", f"{len(master_df):,}")
+                with col2:
+                    sevkiyat_var = (master_df['sevkiyat'] > 0).sum()
+                    st.metric("✅ Sevkiyatlı Satır", f"{sevkiyat_var:,}")
+                with col3:
+                    alim_gereken = master_df.groupby('urun_kod')['alim_ihtiyaci'].first()
+                    alim_var = (alim_gereken > 0).sum()
+                    st.metric("🛒 Alım Gereken Ürün", f"{alim_var:,}")
+                with col4:
+                    if hesaplama_yapildi:
+                        tip_sayisi = master_df['tip'].nunique()
+                        st.metric("🎯 Sevkiyat Tipi", f"{tip_sayisi}")
+                    else:
+                        st.metric("🎯 Sevkiyat Tipi", "N/A")
+                
+                st.markdown("---")
+                
+                # Tip dağılımı (eğer hesaplama yapıldıysa)
+                if hesaplama_yapildi:
+                    st.subheader("📈 Sevkiyat Tipi Dağılımı")
+                    col1, col2 = st.columns([1, 2])
+                    
+                    with col1:
+                        tip_dist = master_df[master_df['tip'] != '']['tip'].value_counts()
+                        st.dataframe(tip_dist, use_container_width=True)
+                    
+                    with col2:
+                        st.bar_chart(tip_dist)
+                
+                st.markdown("---")
+                
+                # Önizleme
+                st.subheader("🔍 Master Data Önizleme (İlk 20 Satır)")
+                
+                # Yeni kolonları vurgula
+                def highlight_new_cols(s):
+                    return ['background-color: #e8f4f8' if s.name in new_cols else '' for _ in s]
+                
+                preview_df = master_df.head(20).style.apply(highlight_new_cols, axis=0)
+                st.dataframe(preview_df, use_container_width=True, height=400)
+                
+                st.markdown("---")
+                
+                # Kolonlar hakkında bilgi
+                st.subheader("📋 Yeni Kolonlar Açıklaması")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("""
+                    **🆕 Eklenen Kolonlar:**
+                    - **ihtiyac:** Hesaplanan sevkiyat ihtiyacı
+                    - **sevkiyat:** Gerçekleşen sevkiyat miktarı
+                    - **tip:** Sevkiyat tipi (RPT/Initial/Min)
+                    """)
+                
+                with col2:
+                    st.markdown("""
+                    **🆕 Eklenen Kolonlar (devam):**
+                    - **oncelik:** Sevkiyat öncelik sırası
+                    - **depo_stok:** İlgili depodaki ürün stoku
+                    - **alim_ihtiyaci:** Tedarikçiden alınması gereken
+                    """)
+                
+                st.markdown("---")
+                
+                # İstatistikler
+                st.subheader("📊 Detaylı İstatistikler")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("**Sevkiyat İstatistikleri**")
+                    if master_df['sevkiyat'].sum() > 0:
+                        st.write(f"- Toplam Sevkiyat: {master_df['sevkiyat'].sum():,.0f}")
+                        st.write(f"- Ortalama Sevkiyat: {master_df[master_df['sevkiyat']>0]['sevkiyat'].mean():,.0f}")
+                        st.write(f"- Max Sevkiyat: {master_df['sevkiyat'].max():,.0f}")
+                    else:
+                        st.write("- Sevkiyat hesaplaması yok")
+                
+                with col2:
+                    st.markdown("**Alım Sipariş İstatistikleri**")
+                    alim_urun = master_df.groupby('urun_kod')['alim_ihtiyaci'].first()
+                    if alim_urun.sum() > 0:
+                        st.write(f"- Toplam Alım: {alim_urun.sum():,.0f}")
+                        st.write(f"- Ortalama Alım/Ürün: {alim_urun[alim_urun>0].mean():,.0f}")
+                        st.write(f"- Max Alım: {alim_urun.max():,.0f}")
+                    else:
+                        st.write("- Alım ihtiyacı yok")
+                
+                with col3:
+                    st.markdown("**Genel İstatistikler**")
+                    st.write(f"- Toplam Ürün: {master_df['urun_kod'].nunique():,}")
+                    st.write(f"- Toplam Mağaza: {master_df['magaza_kod'].nunique():,}")
+                    st.write(f"- Toplam Satış: {master_df['satis'].sum():,.0f}")
+                
+                st.markdown("---")
+                
+                # Export butonları
+                st.subheader("📥 Master Data'yı Dışa Aktar")
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.download_button(
+                        label="📥 CSV İndir",
+                        data=master_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="master_data.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                
+                with col2:
+                    st.download_button(
+                        label="📥 Excel İndir",
+                        data=master_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="master_data.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                
+                with col3:
+                    st.download_button(
+                        label="📥 JSON İndir",
+                        data=master_df.to_json(orient='records', force_ascii=False),
+                        file_name="master_data.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                
+                with col4:
+                    # Parquet formatı için
+                    import io
+                    buffer = io.BytesIO()
+                    master_df.to_parquet(buffer, index=False)
+                    st.download_button(
+                        label="📥 Parquet İndir",
+                        data=buffer.getvalue(),
+                        file_name="master_data.parquet",
+                        mime="application/octet-stream",
+                        use_container_width=True
+                    )
+                
+                st.markdown("---")
+                
+                # Filtreleme ve arama
+                st.subheader("🔎 Master Data'da Arama ve Filtreleme")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    filtre_tip = st.multiselect(
+                        "Sevkiyat Tipine Göre Filtrele",
+                        options=['RPT', 'Initial', 'Min'],
+                        default=[]
+                    )
+                
+                with col2:
+                    filtre_magaza = st.text_input("Mağaza Kodu Ara", "")
+                
+                with col3:
+                    filtre_urun = st.text_input("Ürün Kodu Ara", "")
+                
+                # Filtreleri uygula
+                filtered_df = master_df.copy()
+                
+                if filtre_tip:
+                    filtered_df = filtered_df[filtered_df['tip'].isin(filtre_tip)]
+                
+                if filtre_magaza:
+                    filtered_df = filtered_df[filtered_df['magaza_kod'].str.contains(filtre_magaza, case=False, na=False)]
+                
+                if filtre_urun:
+                    filtered_df = filtered_df[filtered_df['urun_kod'].str.contains(filtre_urun, case=False, na=False)]
+                
+                if len(filtered_df) > 0:
+                    st.write(f"**Filtre Sonucu:** {len(filtered_df)} satır bulundu")
+                    st.dataframe(filtered_df, use_container_width=True, height=300)
+                    
+                    # Filtrelenmiş veriyi indir
+                    st.download_button(
+                        label="📥 Filtrelenmiş Veriyi İndir (CSV)",
+                        data=filtered_df.to_csv(index=False, encoding='utf-8-sig'),
+                        file_name="master_data_filtered.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("⚠️ Filtre kriterlerine uyan kayıt bulunamadı.")
