@@ -51,6 +51,7 @@ if 'yeni_urun_listesi' not in st.session_state:
 st.sidebar.title("📦 Sevkiyat ve WSSI Alım Sipariş Sistemi")
 menu = st.sidebar.radio(
     "Menü",
+    st.markdown("---")
     ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
      "🎲 Hedef Matris", "📊 Sıralama", "🚚 Hesaplama", "🛒 Alım Sipariş", "📈 Raporlar", "💾 Master Data"]
 
