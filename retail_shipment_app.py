@@ -1600,7 +1600,6 @@ elif menu == "💵 Alım Sipariş":
             
             st.info(f"✅ **{len(urun_ihtiyac)} ürün** için ihtiyaç hesaplandı")
             
-            
             # ✅ GERÇEKLEŞEN SEVKİYATI EKLE
             st.info("📦 **Adım 2:** Gerçekleşen sevkiyatlar birleştiriliyor...")
             
@@ -1609,7 +1608,6 @@ elif menu == "💵 Alım Sipariş":
             }).reset_index()
             gerceklesen_sevkiyat.columns = ['urun_kod', 'gerceklesen_sevkiyat']
             
-            # ✅ DEĞİŞİKLİK: how='left' olmalı ki tüm ürünler kalsın
             urun_ihtiyac = urun_ihtiyac.merge(gerceklesen_sevkiyat, on='urun_kod', how='left')
             urun_ihtiyac['gerceklesen_sevkiyat'] = urun_ihtiyac['gerceklesen_sevkiyat'].fillna(0)
             
@@ -1619,11 +1617,6 @@ elif menu == "💵 Alım Sipariş":
                 (urun_ihtiyac['stok'] + urun_ihtiyac['yol'] + urun_ihtiyac['gerceklesen_sevkiyat'])
             ).clip(lower=0)
             
-            # ✅ DEĞİŞİKLİK: Burada filtreleme yapmadan devam et
-            # Sadece kalan ihtiyacı olanlar
-            # urun_ihtiyac_filtered = urun_ihtiyac[urun_ihtiyac['kalan_ihtiyac'] > 0].copy()
-            # Yukarıdaki satırı SİL veya yorum yap, yerine:
-            
             st.info(f"⚠️ **{(urun_ihtiyac['kalan_ihtiyac'] > 0).sum()} ürün** için kalan ihtiyaç var")
             
             # ✅ DEPO STOĞU EKLE
@@ -1632,7 +1625,7 @@ elif menu == "💵 Alım Sipariş":
             depo_stok_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
             depo_stok_toplam.columns = ['urun_kod', 'depo_stok']
             
-            # ✅ DEĞİŞİKLİK: urun_ihtiyac_filtered yerine urun_ihtiyac kullan
+            # ✅ DİKKAT: urun_ihtiyac'a merge et (filtered değil!)
             urun_ihtiyac = urun_ihtiyac.merge(depo_stok_toplam, on='urun_kod', how='left')
             urun_ihtiyac['depo_stok'] = urun_ihtiyac['depo_stok'].fillna(0)
             
@@ -1651,6 +1644,11 @@ elif menu == "💵 Alım Sipariş":
                     available_cols.append(col)
             
             urun_ihtiyac_filtered = urun_ihtiyac_filtered.merge(urun_master[available_cols], on='urun_kod', how='left')
+            
+            if 'urun_ad' not in urun_ihtiyac_filtered.columns:
+                urun_ihtiyac_filtered['urun_ad'] = "Ürün " + urun_ihtiyac_filtered['urun_kod']
+            
+            
             # ✅ KALAN İHTİYAÇ
             urun_ihtiyac['kalan_ihtiyac'] = (
                 urun_ihtiyac['toplam_ihtiyac'] - 
