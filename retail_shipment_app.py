@@ -51,15 +51,15 @@ if 'yeni_urun_listesi' not in st.session_state:
 st.sidebar.title("📦 Sevkiyat ve WSSI Alım Sipariş Sistemi")
 menu = st.sidebar.radio(
     "Menü",
-    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🎯 Segmentasyon", 
-     "🎲 Hedef Matris", "📊 Sıralama", "🚚 Hesaplama", "🛒 Alım Sipariş", "📈 Raporlar", "💾 Master Data"]
+    ["🏠 Ana Sayfa", "📤 Veri Yükleme", "🫧 Segmentasyon", 
+     "🎲 Hedef Matris", "🔢 Sıralama", "📐 Hesaplama", "💵 Alım Sipariş", "📈 Raporlar", "💾 Master Data"]
 )
 
 # ============================================
 # 🏠 ANA SAYFA
 # ============================================
 if menu == "🏠 Ana Sayfa":
-    st.title("🏠 AR4U - Thorius Planlama Sistemi")
+    st.title("🌟 AR4U - Thorius Planlama Sistemi")
     st.markdown("---")
     
    
