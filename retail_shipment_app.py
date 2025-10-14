@@ -82,7 +82,7 @@ elif menu == "📤 Veri Yükleme":
     st.title("📤 Veri Yükleme")
     st.markdown("---")
     
-    # Örnek CSV'ler indirme bölümü - GÜNCELLENMİŞ
+    # Örnek CSV'ler indirme bölümü
     with st.expander("📥 Örnek CSV'leri İndir", expanded=False):
         st.info("Tüm örnek CSV dosyalarını aşağıdan indirebilirsiniz.")
         
@@ -171,10 +171,7 @@ elif menu == "📤 Veri Yükleme":
     
     st.markdown("---")
     
-    # VERİ DURUMU TABLOSU
-    st.subheader("📊 Veri Yükleme Durumu")
-    
-    # Veri tanımları - GÜNCELLENMİŞ
+    # Veri tanımları
     data_definitions = {
         'urun_master': {
             'name': 'Ürün Master',
@@ -183,58 +180,159 @@ elif menu == "📤 Veri Yükleme":
                        'umg', 'umg_ad', 'mg', 'mg_ad', 'marka_kod', 'marka_ad', 'klasman_kod', 'klasman_ad',
                        'nitelik', 'durum', 'ithal', 'ithal_ad', 'tanim'],
             'state_key': 'urun_master',
-            'icon': '📦',
-            'description': 'Ürün bilgileri - Diğer tablolara join için kullanılır'
+            'icon': '📦'
         },
         'magaza_master': {
             'name': 'Mağaza Master',
             'required': True,
             'columns': ['magaza_kod', 'magaza_ad', 'il', 'bolge', 'tip', 'adres_kod', 'sm', 'bs', 'depo_kod'],
             'state_key': 'magaza_master',
-            'icon': '🏪',
-            'description': 'Mağaza bilgileri - Diğer tablolara join için kullanılır'
+            'icon': '🏪'
         },
         'depo_stok': {
             'name': 'Depo Stok',
             'required': True,
             'columns': ['depo_kod', 'depo_ad', 'urun_kod', 'stok'],
             'state_key': 'depo_stok',
-            'icon': '📦',
-            'description': 'Sadece: depo_kod, depo_ad, urun_kod, stok (urun_ad master\'dan gelir)'
+            'icon': '📦'
         },
         'anlik_stok_satis': {
             'name': 'Anlık Stok/Satış',
             'required': True,
             'columns': ['magaza_kod', 'urun_kod', 'stok', 'yol', 'satis', 'ciro', 'smm'],
             'state_key': 'anlik_stok_satis',
-            'icon': '📊',
-            'description': 'Sadece: magaza_kod, urun_kod, stok, yol, satis, ciro, smm (diğerleri master\'dan gelir)'
+            'icon': '📊'
         },
         'kpi': {
             'name': 'KPI',
             'required': True,
             'columns': ['mg_id', 'min_deger', 'max_deger', 'forward_cover'],
             'state_key': 'kpi',
-            'icon': '🎯',
-            'description': 'Sadece: mg_id, min_deger, max_deger, forward_cover (mg_ad master\'dan gelir)'
+            'icon': '🎯'
         },
         'yasak_master': {
-            'name': 'Yasak Master',
+            'name': 'Yasak',
             'required': False,
             'columns': ['urun_kod', 'magaza_kod', 'yasak_durum'],
             'state_key': 'yasak_master',
-            'icon': '🚫',
-            'description': 'Sadece: urun_kod, magaza_kod, yasak_durum (1=yasak, 0 veya yok=yasak değil)'
+            'icon': '🚫'
         },
         'haftalik_trend': {
             'name': 'Haftalık Trend',
             'required': False,
             'columns': ['klasman_kod', 'marka_kod', 'yil', 'hafta', 'stok', 'satis', 'ciro', 'smm', 'iftutar'],
             'state_key': 'haftalik_trend',
-            'icon': '📈',
-            'description': 'Sadece: klasman_kod, marka_kod, yil, hafta, stok, satis, ciro, smm, iftutar (ad\'lar master\'dan gelir)'
+            'icon': '📈'
         }
     }
+    
+    # ÇOKLU DOSYA YÜKLEME
+    st.subheader("📤 Çoklu Dosya Yükleme")
+    
+    uploaded_files = st.file_uploader(
+        "CSV dosyalarını seçin (birden fazla seçebilirsiniz)",
+        type=['csv'],
+        accept_multiple_files=True,
+        key="multi_upload"
+    )
+    
+    if uploaded_files:
+        st.write(f"**{len(uploaded_files)} dosya seçildi**")
+        
+        if st.button("🚀 Tüm Dosyaları Yükle", type="primary", use_container_width=True):
+            upload_results = []
+            
+            for uploaded_file in uploaded_files:
+                filename = uploaded_file.name.lower()
+                
+                # Dosya adından veri tipini bul
+                matched_key = None
+                for key, definition in data_definitions.items():
+                    if key in filename or definition['name'].lower().replace(' ', '_') in filename:
+                        matched_key = key
+                        break
+                
+                if not matched_key:
+                    upload_results.append({
+                        'Dosya': uploaded_file.name,
+                        'Veri Tipi': '❓ Bilinmiyor',
+                        'Durum': '❌ Eşleştirilemedi',
+                        'Detay': 'Dosya adı tanımlı veri tiplerine uymuyor'
+                    })
+                    continue
+                
+                definition = data_definitions[matched_key]
+                
+                try:
+                    df = pd.read_csv(uploaded_file)
+                    
+                    # Kolon kontrolü
+                    existing_cols = set(df.columns)
+                    required_cols = set(definition['columns'])
+                    missing_cols = required_cols - existing_cols
+                    extra_cols = existing_cols - required_cols
+                    
+                    if missing_cols:
+                        upload_results.append({
+                            'Dosya': uploaded_file.name,
+                            'Veri Tipi': f"{definition['icon']} {definition['name']}",
+                            'Durum': '❌ Başarısız',
+                            'Detay': f"Eksik kolonlar: {', '.join(list(missing_cols)[:3])}"
+                        })
+                    else:
+                        # Sadece gerekli kolonları al
+                        df_clean = df[definition['columns']].copy()
+                        st.session_state[definition['state_key']] = df_clean
+                        
+                        detay = f"✅ {len(df_clean):,} satır"
+                        if extra_cols:
+                            detay += f" (fazla kolonlar kaldırıldı)"
+                        
+                        upload_results.append({
+                            'Dosya': uploaded_file.name,
+                            'Veri Tipi': f"{definition['icon']} {definition['name']}",
+                            'Durum': '✅ Başarılı',
+                            'Detay': detay
+                        })
+                
+                except Exception as e:
+                    upload_results.append({
+                        'Dosya': uploaded_file.name,
+                        'Veri Tipi': f"{definition['icon']} {definition['name']}",
+                        'Durum': '❌ Hata',
+                        'Detay': str(e)[:50]
+                    })
+            
+            # Sonuçları göster
+            st.markdown("---")
+            st.subheader("📋 Yükleme Sonuçları")
+            
+            results_df = pd.DataFrame(upload_results)
+            
+            def highlight_upload_results(row):
+                if '✅ Başarılı' in row['Durum']:
+                    return ['background-color: #d4edda'] * len(row)
+                elif '❌' in row['Durum']:
+                    return ['background-color: #f8d7da'] * len(row)
+                else:
+                    return ['background-color: #fff3cd'] * len(row)
+            
+            st.dataframe(
+                results_df.style.apply(highlight_upload_results, axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            success_count = sum(1 for r in upload_results if '✅ Başarılı' in r['Durum'])
+            st.success(f"✅ {success_count} / {len(upload_results)} dosya başarıyla yüklendi!")
+            
+            time.sleep(1)
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # VERİ DURUMU TABLOSU
+    st.subheader("📊 Veri Yükleme Durumu")
     
     # Durum tablosunu oluştur
     status_data = []
@@ -249,12 +347,9 @@ elif menu == "📤 Veri Yükleme":
             existing_cols = set(data.columns)
             required_cols = set(definition['columns'])
             missing_cols = required_cols - existing_cols
-            extra_cols = existing_cols - required_cols
             
             if missing_cols:
-                kolon_durumu = f"⚠️ Eksik: {', '.join(list(missing_cols)[:3])}"
-            elif extra_cols:
-                kolon_durumu = f"ℹ️ Fazla kolon var"
+                kolon_durumu = f"⚠️ Eksik kolon var"
             else:
                 kolon_durumu = '✅ Tam'
         else:
@@ -262,21 +357,27 @@ elif menu == "📤 Veri Yükleme":
             row_count = 0
             kolon_durumu = '-'
         
+        # Beklenen kolonları liste olarak
+        expected_cols_str = ', '.join(definition['columns'][:5])
+        if len(definition['columns']) > 5:
+            expected_cols_str += f"... (+{len(definition['columns'])-5})"
+        
         status_data.append({
             'Veri': f"{definition['icon']} {definition['name']}",
-            'Zorunlu': '🔴 Evet' if definition['required'] else '🟢 Hayır',
+            'Zorunlu': '🔴' if definition['required'] else '🟢',
             'Durum': status,
-            'Satır Sayısı': f"{row_count:,}" if row_count > 0 else '-',
-            'Kolon Durumu': kolon_durumu
+            'Satır': f"{row_count:,}" if row_count > 0 else '-',
+            'Kolon': kolon_durumu,
+            'Beklenen Kolonlar': expected_cols_str
         })
     
     status_df = pd.DataFrame(status_data)
     
-    # Renk kodlaması için stil
+    # Renk kodlaması
     def highlight_status(row):
         if '✅ Yüklü' in row['Durum']:
             return ['background-color: #d4edda'] * len(row)
-        elif '❌ Yüklenmedi' in row['Durum'] and '🔴 Evet' in row['Zorunlu']:
+        elif '❌ Yüklenmedi' in row['Durum'] and '🔴' in row['Zorunlu']:
             return ['background-color: #f8d7da'] * len(row)
         else:
             return [''] * len(row)
@@ -289,21 +390,22 @@ elif menu == "📤 Veri Yükleme":
     
     # Bilgilendirme
     st.info("""
-    **💡 Veri Yapısı Hakkında:**
-    - **Ürün Master** ve **Mağaza Master** diğer tablolara join için kullanılır
-    - Diğer CSV'lerde sadece **kod** kolonları olmalı, **ad** kolonları master'lardan gelir
-    - **Yasak Master**: yasak_durum = 1 (yasaklı), 0 veya tabloda yok (yasak değil)
+    **💡 Veri Yapısı:**
+    - 🔴 Zorunlu veriler yüklenmeli | 🟢 Opsiyonel
+    - **Master'lar** diğer tablolara join için kullanılır
+    - Diğer CSV'lerde sadece **kod** kolonları, **ad** kolonları master'lardan gelir
+    - **Yasak**: yasak_durum = 1 (yasak), 0 veya yok (yasak değil)
     """)
     
     # Özet bilgiler
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         total_loaded = sum(1 for _, def_data in data_definitions.items() 
                           if st.session_state.get(def_data['state_key']) is not None 
                           and len(st.session_state.get(def_data['state_key'])) > 0)
-        st.metric("📂 Yüklü Veri", f"{total_loaded} / {len(data_definitions)}")
+        st.metric("📂 Yüklü", f"{total_loaded}/{len(data_definitions)}")
     
     with col2:
         required_count = sum(1 for def_data in data_definitions.values() if def_data['required'])
@@ -311,7 +413,7 @@ elif menu == "📤 Veri Yükleme":
                              if def_data['required'] 
                              and st.session_state.get(def_data['state_key']) is not None
                              and len(st.session_state.get(def_data['state_key'])) > 0)
-        st.metric("🔴 Zorunlu Veriler", f"{required_loaded} / {required_count}")
+        st.metric("🔴 Zorunlu", f"{required_loaded}/{required_count}")
     
     with col3:
         total_rows = sum(len(st.session_state.get(def_data['state_key'])) 
@@ -319,136 +421,45 @@ elif menu == "📤 Veri Yükleme":
                         if st.session_state.get(def_data['state_key']) is not None)
         st.metric("📊 Toplam Satır", f"{total_rows:,}")
     
+    with col4:
+        if st.button("🗑️ Tümünü Sil", use_container_width=True):
+            for def_data in data_definitions.values():
+                st.session_state[def_data['state_key']] = None
+            st.success("✅ Tüm veriler silindi!")
+            time.sleep(0.5)
+            st.rerun()
+    
     st.markdown("---")
     
-    # DOSYA YÜKLEME ALANI
-    st.subheader("📤 Dosya Yükleme")
+    # TEK DOSYA DETAYI
+    st.subheader("🔍 Detaylı Veri İncelemesi")
     
-    # Seçilen veri tipi
     selected_data = st.selectbox(
-        "Yüklemek istediğiniz veriyi seçin:",
-        options=list(data_definitions.keys()),
-        format_func=lambda x: f"{data_definitions[x]['icon']} {data_definitions[x]['name']}" + 
-                              (" (Zorunlu)" if data_definitions[x]['required'] else " (Opsiyonel)")
-    )
+        "İncelemek istediğiniz veriyi seçin:",
+        options=[k for k in data_definitions.keys() if st.session_state.get(data_definitions[k]['state_key']) is not None],
+        format_func=lambda x: f"{data_definitions[x]['icon']} {data_definitions[x]['name']}",
+        key="detail_select"
+    ) if any(st.session_state.get(data_definitions[k]['state_key']) is not None for k in data_definitions.keys()) else None
     
-    current_def = data_definitions[selected_data]
-    
-    # Beklenen kolonları ve açıklamayı göster
-    with st.expander(f"ℹ️ {current_def['name']} - Beklenen Kolonlar ve Açıklama", expanded=True):
-        st.info(current_def['description'])
-        st.write("**Beklenen kolonlar:**")
-        cols_per_row = 3
-        cols = st.columns(cols_per_row)
-        for idx, col in enumerate(current_def['columns']):
-            with cols[idx % cols_per_row]:
-                st.code(col, language=None)
-    
-    # Dosya yükleme
-    uploaded_file = st.file_uploader(
-        f"{current_def['icon']} {current_def['name']} CSV dosyasını yükleyin",
-        type=['csv'],
-        key=f"upload_{selected_data}"
-    )
-    
-    if uploaded_file:
-        try:
-            df = pd.read_csv(uploaded_file)
-            
-            st.success(f"✅ Dosya okundu: {len(df):,} satır")
-            
-            # Kolon kontrolü
-            existing_cols = set(df.columns)
-            required_cols = set(current_def['columns'])
-            missing_cols = required_cols - existing_cols
-            extra_cols = existing_cols - required_cols
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if missing_cols:
-                    st.error(f"❌ **Eksik kolonlar:** {', '.join(missing_cols)}")
-                else:
-                    st.success("✅ **Tüm zorunlu kolonlar mevcut**")
-            
-            with col2:
-                if extra_cols:
-                    st.warning(f"⚠️ **Fazla kolonlar:** {', '.join(list(extra_cols)[:5])}")
-                    st.info("Fazla kolonlar yükleme sırasında göz ardı edilecek")
-                else:
-                    st.success("✅ **Sadece gerekli kolonlar var**")
-            
-            # Önizleme
-            st.write("**📋 Veri Önizleme (İlk 10 satır):**")
-            st.dataframe(df.head(10), use_container_width=True)
-            
-            # Kaydetme butonu
-            col1, col2, col3 = st.columns([1, 1, 2])
-            
-            with col1:
-                if st.button("💾 Kaydet", type="primary", use_container_width=True):
-                    if missing_cols:
-                        st.error("❌ Eksik kolonlar olduğu için kaydedilemedi!")
-                    else:
-                        # Sadece gerekli kolonları al
-                        df_clean = df[current_def['columns']].copy()
-                        st.session_state[current_def['state_key']] = df_clean
-                        st.success(f"✅ {current_def['name']} kaydedildi!")
-                        if extra_cols:
-                            st.info(f"ℹ️ Fazla kolonlar kaldırıldı: {', '.join(list(extra_cols)[:5])}")
-                        time.sleep(0.5)
-                        st.rerun()
-            
-            with col2:
-                if st.button("❌ İptal", use_container_width=True):
-                    st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Dosya okuma hatası: {str(e)}")
-    
-    # Yüklü veri varsa silme ve detay gösterme
-    st.markdown("---")
-    
-    if st.session_state.get(current_def['state_key']) is not None:
-        st.subheader(f"🔍 {current_def['name']} - Yüklü Veri Detayları")
-        
+    if selected_data:
+        current_def = data_definitions[selected_data]
         data = st.session_state[current_def['state_key']]
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Satır Sayısı", f"{len(data):,}")
+            st.metric("Satır", f"{len(data):,}")
         with col2:
-            st.metric("Kolon Sayısı", len(data.columns))
+            st.metric("Kolon", len(data.columns))
         with col3:
-            st.metric("Bellek Kullanımı", f"{data.memory_usage(deep=True).sum() / 1024 / 1024:.2f} MB")
-        with col4:
-            if st.button("🗑️ Sil", key=f"delete_{selected_data}"):
-                st.session_state[current_def['state_key']] = None
-                st.success(f"✅ {current_def['name']} silindi!")
-                time.sleep(0.5)
-                st.rerun()
+            st.metric("Bellek", f"{data.memory_usage(deep=True).sum() / 1024 / 1024:.2f} MB")
         
-        # Veri önizleme
-        st.write("**📊 Veri Önizleme:**")
-        st.dataframe(data.head(20), use_container_width=True, height=400)
+        st.write("**Beklenen Kolonlar:**")
+        st.code(', '.join(current_def['columns']), language=None)
         
-        # İstatistikler
-        with st.expander("📈 İstatistikler"):
-            st.write("**Sayısal Kolonlar:**")
-            numeric_cols = data.select_dtypes(include=[np.number]).columns
-            if len(numeric_cols) > 0:
-                st.dataframe(data[numeric_cols].describe(), use_container_width=True)
-            else:
-                st.info("Sayısal kolon bulunamadı")
-            
-            st.write("**Boş Değerler:**")
-            null_counts = data.isnull().sum()
-            null_df = pd.DataFrame({
-                'Kolon': null_counts.index,
-                'Boş Sayısı': null_counts.values,
-                'Boş %': (null_counts.values / len(data) * 100).round(2)
-            })
-            st.dataframe(null_df[null_df['Boş Sayısı'] > 0], use_container_width=True)
+        st.dataframe(data.head(20), use_container_width=True, height=300)
+    else:
+        st.info("Henüz yüklenmiş veri yok")
+
 # ============================================
 # 🎯 SEGMENTASYON AYARLARI
 # ============================================
