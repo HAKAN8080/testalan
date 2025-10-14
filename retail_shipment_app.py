@@ -845,6 +845,18 @@ elif menu == "🎲 Hedef Matris":
             include_lowest=True
         )
         
+        # Segment sıralama fonksiyonu
+        def sort_segments(segments):
+            """Segmentleri numerik değere göre sıralar: 0-4, 5-8, 9-12, 15-20, 20-inf"""
+            def get_sort_key(seg):
+                try:
+                    # İlk sayıyı al (0-4 -> 0, 5-8 -> 5, 20-inf -> 20)
+                    return int(seg.split('-')[0])
+                except:
+                    return 9999  # inf veya parse edilemeyen değerler en sona
+            
+            return sorted(segments, key=get_sort_key)
+        
         # Segmentasyon sonuçları
         st.subheader("📊 Segmentasyon Sonuçları")
         
@@ -864,9 +876,12 @@ elif menu == "🎲 Hedef Matris":
         # Matris seçimi ve parametreler
         st.subheader("🎯 Matris Parametreleri")
         
-        # Segmentleri string olarak al ve sırala
-        prod_segments = sorted([str(x) for x in urun_aggregated['urun_segment'].unique() if pd.notna(x)])
-        store_segments = sorted([str(x) for x in magaza_aggregated['magaza_segment'].unique() if pd.notna(x)])
+        # Segmentleri string olarak al ve SIRALA
+        prod_segments_raw = [str(x) for x in urun_aggregated['urun_segment'].unique() if pd.notna(x)]
+        store_segments_raw = [str(x) for x in magaza_aggregated['magaza_segment'].unique() if pd.notna(x)]
+        
+        prod_segments = sort_segments(prod_segments_raw)
+        store_segments = sort_segments(store_segments_raw)
         
         st.info(f"**Ürün Segmentleri:** {', '.join(prod_segments)}")
         st.info(f"**Mağaza Segmentleri:** {', '.join(store_segments)}")
@@ -890,7 +905,7 @@ elif menu == "🎲 Hedef Matris":
                 if seg not in sisme_data.columns:
                     sisme_data[seg] = 0.5
             
-            # Sıralama
+            # Sıralama - ÖNEMLİ!
             sisme_data = sisme_data.reindex(index=prod_segments, columns=store_segments, fill_value=0.5)
         
         edited_sisme = st.data_editor(
@@ -920,6 +935,7 @@ elif menu == "🎲 Hedef Matris":
                 if seg not in genlestirme_data.columns:
                     genlestirme_data[seg] = 1.0
             
+            # Sıralama - ÖNEMLİ!
             genlestirme_data = genlestirme_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_genlestirme = st.data_editor(
@@ -949,6 +965,7 @@ elif menu == "🎲 Hedef Matris":
                 if seg not in min_oran_data.columns:
                     min_oran_data[seg] = 1.0
             
+            # Sıralama - ÖNEMLİ!
             min_oran_data = min_oran_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_min_oran = st.data_editor(
@@ -978,6 +995,7 @@ elif menu == "🎲 Hedef Matris":
                 if seg not in initial_data.columns:
                     initial_data[seg] = 1.0
             
+            # Sıralama - ÖNEMLİ!
             initial_data = initial_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_initial = st.data_editor(
@@ -1002,7 +1020,7 @@ elif menu == "🎲 Hedef Matris":
                 st.success("✅ Tüm matrisler kaydedildi!")
         with col2:
             st.info("ℹ️ Kaydetmeseniz de default değerler kullanılacaktır.")
-
+            
 # ============================================
 # 📊 SIRALAMA
 # ============================================
