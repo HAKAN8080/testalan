@@ -1205,7 +1205,7 @@ elif menu == "📐 Hesaplama":
         
         if st.button("🚀 Sevkiyat Hesapla", type="primary", use_container_width=True):
             start_time = time.time()
-            
+           
             with st.spinner("📊 Hesaplama yapılıyor..."):
                 progress_bar = st.progress(0, text="Veri hazırlanıyor...")
                 
@@ -1225,6 +1225,15 @@ elif menu == "📐 Hesaplama":
                     st.session_state.initial_matris = pd.DataFrame(1.0, index=["0-4"], columns=["0-4"])
                 
                 progress_bar.progress(10, text="Yeni ürünler tespit ediliyor...")
+
+                progress_bar.progress(100, text="Tamamlandı!")
+                
+                # ↓↓↓ BU İKİ SATIRI EKLE ↓↓↓
+                end_time = time.time()
+                calculation_time = end_time - start_time
+                # ↑↑↑ BU İKİ SATIRI EKLE ↑↑↑
+                
+                st.success("✅ Hesaplama tamamlandı!")
                 
                 # YENİ ÜRÜN TESPİTİ
                 depo_df_temp = depo_df.copy()
