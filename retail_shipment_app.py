@@ -823,21 +823,25 @@ elif menu == "🎲 Hedef Matris":
         }).reset_index()
         magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
         
-        # Ürün segmentasyonu
+        # Segmentasyon parametrelerini al
         product_ranges = st.session_state.segmentation_params['product_ranges']
+        store_ranges = st.session_state.segmentation_params['store_ranges']
+        
+        # Ürün segmentasyonu
+        product_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in product_ranges]
         urun_aggregated['urun_segment'] = pd.cut(
             urun_aggregated['stok_satis_orani'], 
             bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
-            labels=[f"{r[0]}-{r[1]}" for r in product_ranges],
+            labels=product_labels,
             include_lowest=True
         )
         
         # Mağaza segmentasyonu
-        store_ranges = st.session_state.segmentation_params['store_ranges']
+        store_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in store_ranges]
         magaza_aggregated['magaza_segment'] = pd.cut(
             magaza_aggregated['stok_satis_orani'],
             bins=[r[0] for r in store_ranges] + [store_ranges[-1][1]],
-            labels=[f"{r[0]}-{r[1]}" for r in store_ranges],
+            labels=store_labels,
             include_lowest=True
         )
         
@@ -860,16 +864,34 @@ elif menu == "🎲 Hedef Matris":
         # Matris seçimi ve parametreler
         st.subheader("🎯 Matris Parametreleri")
         
+        # Segmentleri string olarak al ve sırala
         prod_segments = sorted([str(x) for x in urun_aggregated['urun_segment'].unique() if pd.notna(x)])
         store_segments = sorted([str(x) for x in magaza_aggregated['magaza_segment'].unique() if pd.notna(x)])
+        
+        st.info(f"**Ürün Segmentleri:** {', '.join(prod_segments)}")
+        st.info(f"**Mağaza Segmentleri:** {', '.join(store_segments)}")
         
         # 1. ŞİŞME ORANI MATRİSİ
         st.markdown("### 1️⃣ Şişme Oranı Matrisi (Default: 0.5)")
         
-        if st.session_state.sisme_orani is None:
+        if st.session_state.sisme_orani is None or len(st.session_state.sisme_orani) == 0:
             sisme_data = pd.DataFrame(0.5, index=prod_segments, columns=store_segments)
         else:
-            sisme_data = st.session_state.sisme_orani
+            # Mevcut matrisi kontrol et ve eksikleri doldur
+            sisme_data = st.session_state.sisme_orani.copy()
+            
+            # Eksik satırları ekle
+            for seg in prod_segments:
+                if seg not in sisme_data.index:
+                    sisme_data.loc[seg] = 0.5
+            
+            # Eksik kolonları ekle
+            for seg in store_segments:
+                if seg not in sisme_data.columns:
+                    sisme_data[seg] = 0.5
+            
+            # Sıralama
+            sisme_data = sisme_data.reindex(index=prod_segments, columns=store_segments, fill_value=0.5)
         
         edited_sisme = st.data_editor(
             sisme_data,
@@ -885,10 +907,20 @@ elif menu == "🎲 Hedef Matris":
         # 2. GENLEŞTİRME ORANI MATRİSİ
         st.markdown("### 2️⃣ Genleştirme Oranı Matrisi (Default: 1.0)")
         
-        if st.session_state.genlestirme_orani is None:
+        if st.session_state.genlestirme_orani is None or len(st.session_state.genlestirme_orani) == 0:
             genlestirme_data = pd.DataFrame(1.0, index=prod_segments, columns=store_segments)
         else:
-            genlestirme_data = st.session_state.genlestirme_orani
+            genlestirme_data = st.session_state.genlestirme_orani.copy()
+            
+            for seg in prod_segments:
+                if seg not in genlestirme_data.index:
+                    genlestirme_data.loc[seg] = 1.0
+            
+            for seg in store_segments:
+                if seg not in genlestirme_data.columns:
+                    genlestirme_data[seg] = 1.0
+            
+            genlestirme_data = genlestirme_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_genlestirme = st.data_editor(
             genlestirme_data,
@@ -904,10 +936,20 @@ elif menu == "🎲 Hedef Matris":
         # 3. MIN ORAN MATRİSİ
         st.markdown("### 3️⃣ Min Oran Matrisi (Default: 1.0)")
         
-        if st.session_state.min_oran is None:
+        if st.session_state.min_oran is None or len(st.session_state.min_oran) == 0:
             min_oran_data = pd.DataFrame(1.0, index=prod_segments, columns=store_segments)
         else:
-            min_oran_data = st.session_state.min_oran
+            min_oran_data = st.session_state.min_oran.copy()
+            
+            for seg in prod_segments:
+                if seg not in min_oran_data.index:
+                    min_oran_data.loc[seg] = 1.0
+            
+            for seg in store_segments:
+                if seg not in min_oran_data.columns:
+                    min_oran_data[seg] = 1.0
+            
+            min_oran_data = min_oran_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_min_oran = st.data_editor(
             min_oran_data,
@@ -923,10 +965,20 @@ elif menu == "🎲 Hedef Matris":
         # 4. INITIAL MATRİSİ
         st.markdown("### 4️⃣ Initial Matris (Yeni Ürünler İçin - Default: 1.0)")
         
-        if st.session_state.initial_matris is None:
+        if st.session_state.initial_matris is None or len(st.session_state.initial_matris) == 0:
             initial_data = pd.DataFrame(1.0, index=prod_segments, columns=store_segments)
         else:
-            initial_data = st.session_state.initial_matris
+            initial_data = st.session_state.initial_matris.copy()
+            
+            for seg in prod_segments:
+                if seg not in initial_data.index:
+                    initial_data.loc[seg] = 1.0
+            
+            for seg in store_segments:
+                if seg not in initial_data.columns:
+                    initial_data[seg] = 1.0
+            
+            initial_data = initial_data.reindex(index=prod_segments, columns=store_segments, fill_value=1.0)
         
         edited_initial = st.data_editor(
             initial_data,
