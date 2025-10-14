@@ -1710,42 +1710,85 @@ elif menu == "💵 Alım Sipariş":
     
     st.markdown("---")
     
-    # 5. Matris - Cover Grup Katsayıları
-    st.subheader("📊 5. Matris: Cover Grup Genişletme Katsayıları")
+    # 5. Matris - Cover Segment Katsayıları
+    st.subheader("📊 5. Matris: Cover Segment Genişletme Katsayıları")
     
     st.info("""
     **Bu matris sadece alım sipariş hesaplaması için kullanılır.**
     
-    Her cover grup için farklı genişletme katsayısı tanımlayabilirsiniz.
+    Her cover segment (0-4, 5-8, vb.) için farklı genişletme katsayısı tanımlayabilirsiniz.
     Formülde: Talep = Satış × **Genişletme Katsayısı** × (Forward Cover + 2)
     """)
     
-    if 'cover_grup_matrix' not in st.session_state:
-        # Default cover grupları
-        st.session_state.cover_grup_matrix = pd.DataFrame({
-            'cover_grup': ['A', 'B', 'C', 'D', 'E'],
-            'katsayi': [1.0, 1.0, 1.0, 1.0, 1.0]
+    # Segmentasyon parametrelerini al
+    product_ranges = st.session_state.segmentation_params['product_ranges']
+    
+    # Cover segmentlerini oluştur
+    cover_segments = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in product_ranges]
+    
+    # Segment sıralama fonksiyonu
+    def sort_segments(segments):
+        def get_sort_key(seg):
+            try:
+                return int(seg.split('-')[0])
+            except:
+                return 9999
+        return sorted(segments, key=get_sort_key)
+    
+    cover_segments_sorted = sort_segments(cover_segments)
+    
+    if 'cover_segment_matrix' not in st.session_state or st.session_state.cover_segment_matrix is None:
+        # Default katsayı tablosu
+        st.session_state.cover_segment_matrix = pd.DataFrame({
+            'cover_segment': cover_segments_sorted,
+            'katsayi': [1.0] * len(cover_segments_sorted)
         })
+    else:
+        # Mevcut matrisi güncelle - yeni segmentler eklenmişse
+        existing_df = st.session_state.cover_segment_matrix.copy()
+        existing_segments = set(existing_df['cover_segment'].tolist())
+        
+        # Yeni segmentleri ekle
+        for seg in cover_segments_sorted:
+            if seg not in existing_segments:
+                new_row = pd.DataFrame({'cover_segment': [seg], 'katsayi': [1.0]})
+                existing_df = pd.concat([existing_df, new_row], ignore_index=True)
+        
+        # Sadece mevcut segmentleri tut
+        existing_df = existing_df[existing_df['cover_segment'].isin(cover_segments_sorted)]
+        
+        # Sırala
+        existing_df['sort_key'] = existing_df['cover_segment'].apply(
+            lambda x: int(x.split('-')[0]) if x.split('-')[0].isdigit() else 9999
+        )
+        existing_df = existing_df.sort_values('sort_key').drop('sort_key', axis=1).reset_index(drop=True)
+        
+        st.session_state.cover_segment_matrix = existing_df
     
     edited_cover_matrix = st.data_editor(
-        st.session_state.cover_grup_matrix,
+        st.session_state.cover_segment_matrix,
         use_container_width=True,
-        num_rows="dynamic",
+        hide_index=True,
         column_config={
-            "cover_grup": st.column_config.TextColumn("Cover Grup", required=True),
+            "cover_segment": st.column_config.TextColumn(
+                "Cover Segment",
+                disabled=True,
+                width="medium"
+            ),
             "katsayi": st.column_config.NumberColumn(
                 "Genişletme Katsayısı",
                 min_value=0.0,
                 max_value=10.0,
                 step=0.1,
                 format="%.2f",
-                required=True
+                required=True,
+                width="medium"
             )
         }
     )
     
-    if st.button("💾 Cover Grup Matrisini Kaydet"):
-        st.session_state.cover_grup_matrix = edited_cover_matrix
+    if st.button("💾 Cover Segment Matrisini Kaydet"):
+        st.session_state.cover_segment_matrix = edited_cover_matrix
         st.success("✅ Kaydedildi!")
     
     st.markdown("---")
@@ -1758,13 +1801,13 @@ elif menu == "💵 Alım Sipariş":
                 anlik_df = st.session_state.anlik_stok_satis.copy()
                 depo_df = st.session_state.depo_stok.copy()
                 kpi_df = st.session_state.kpi.copy()
-                cover_matrix = st.session_state.cover_grup_matrix.copy()
+                cover_matrix = st.session_state.cover_segment_matrix.copy()
                 
                 st.write("**📊 Debug: Veri boyutları**")
                 st.write(f"- Anlık Stok/Satış: {len(anlik_df):,} satır")
                 st.write(f"- Depo Stok: {len(depo_df):,} satır")
                 st.write(f"- KPI: {len(kpi_df)} satır")
-                st.write(f"- Cover Matrix: {len(cover_matrix)} satır")
+                st.write(f"- Cover Segment Matrix: {len(cover_matrix)} segment")
                 
                 # Veri tiplerini düzelt
                 anlik_df['urun_kod'] = anlik_df['urun_kod'].astype(str)
@@ -1774,13 +1817,13 @@ elif menu == "💵 Alım Sipariş":
                 
                 # 2. ÜRÜN BAZINDA TOPLAMA
                 urun_toplam = anlik_df.groupby('urun_kod').agg({
-                    'urun_ad': 'first',
+                    'urun_kod': 'first',
                     'stok': 'sum',
                     'yol': 'sum',
                     'satis': 'sum',
                     'ciro': 'sum',
                     'smm': 'sum'
-                }).reset_index()
+                }).reset_index(drop=True)
                 
                 st.write(f"**🏷️ Debug: Ürün bazında toplam:** {len(urun_toplam):,} ürün")
                 
@@ -1834,31 +1877,27 @@ elif menu == "💵 Alım Sipariş":
                 
                 st.write(f"**📈 Debug: Cover aralığı:** {urun_toplam['cover'].min():.2f} - {urun_toplam[urun_toplam['cover'] < 999]['cover'].max():.2f}")
                 
-                # 6. COVER GRUP EKLE
-                if st.session_state.urun_master is not None:
-                    urun_master = st.session_state.urun_master[['urun_kod']].copy()
-                    urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
-                    
-                    if 'mg' in st.session_state.urun_master.columns:
-                        urun_master['mg'] = st.session_state.urun_master['mg'].astype(str)
-                        urun_master['cover_grup'] = urun_master['mg'].str[0].fillna('A')
-                    else:
-                        urun_master['cover_grup'] = 'A'
-                    
-                    urun_toplam = urun_toplam.merge(
-                        urun_master[['urun_kod', 'cover_grup']], 
-                        on='urun_kod', 
-                        how='left'
-                    )
-                else:
-                    urun_toplam['cover_grup'] = 'A'
+                # 6. COVER SEGMENT ATAMASI
+                # Segmentasyon range'lerini al
+                product_ranges = st.session_state.segmentation_params['product_ranges']
+                product_labels = [f"{int(r[0])}-{int(r[1]) if r[1] != float('inf') else 'inf'}" for r in product_ranges]
                 
-                urun_toplam['cover_grup'] = urun_toplam['cover_grup'].fillna('A')
+                urun_toplam['cover_segment'] = pd.cut(
+                    urun_toplam['cover'],
+                    bins=[r[0] for r in product_ranges] + [product_ranges[-1][1]],
+                    labels=product_labels,
+                    include_lowest=True
+                )
+                
+                urun_toplam['cover_segment'] = urun_toplam['cover_segment'].astype(str)
+                
+                st.write(f"**🎯 Debug: Cover segment dağılımı:**")
+                st.write(urun_toplam['cover_segment'].value_counts().sort_index())
                 
                 # 7. GENİŞLETME KATSAYISINI EKLE
                 urun_toplam = urun_toplam.merge(
                     cover_matrix.rename(columns={'katsayi': 'genlestirme_katsayisi'}),
-                    on='cover_grup',
+                    on='cover_segment',
                     how='left'
                 )
                 urun_toplam['genlestirme_katsayisi'] = urun_toplam['genlestirme_katsayisi'].fillna(1.0)
@@ -1926,7 +1965,7 @@ elif menu == "💵 Alım Sipariş":
                 
                 # 11. SONUÇLARI HAZIRLA
                 sonuc_df = urun_toplam[[
-                    'urun_kod', 'urun_ad', 'cover_grup',
+                    'urun_kod', 'cover_segment',
                     'stok', 'yol', 'depo_stok', 'satis',
                     'ciro', 'toplam_smm', 'brut_kar', 'brut_kar_marji',
                     'cover', 'genlestirme_katsayisi', 'forward_cover',
@@ -1965,6 +2004,26 @@ elif menu == "💵 Alım Sipariş":
                         st.metric("📊 Ort. Alım/SKU", f"{ort_alim:,.0f}")
                     else:
                         st.metric("📊 Ort. Alım/SKU", "0")
+                
+                st.markdown("---")
+                
+                # Cover Segment bazında özet
+                st.subheader("🎯 Cover Segment Bazında Analiz")
+                
+                if (sonuc_df['alim_siparis'] > 0).sum() > 0:
+                    cover_dist = sonuc_df[sonuc_df['alim_siparis'] > 0].groupby('cover_segment').agg({
+                        'urun_kod': 'count',
+                        'alim_siparis': 'sum'
+                    }).reset_index()
+                    cover_dist.columns = ['Cover Segment', 'Ürün Sayısı', 'Toplam Alım']
+                    
+                    # Sırala
+                    cover_dist['sort_key'] = cover_dist['Cover Segment'].apply(
+                        lambda x: int(x.split('-')[0]) if x.split('-')[0].isdigit() else 9999
+                    )
+                    cover_dist = cover_dist.sort_values('sort_key').drop('sort_key', axis=1)
+                    
+                    st.dataframe(cover_dist, use_container_width=True)
                 
                 st.markdown("---")
                 
@@ -2007,7 +2066,7 @@ elif menu == "💵 Alım Sipariş":
                     st.subheader("🏆 En Yüksek Alım Siparişli 10 Ürün")
                     
                     top_10 = display_df.nlargest(10, 'alim_siparis')[[
-                        'urun_kod', 'urun_ad', 'cover_grup', 'cover',
+                        'urun_kod', 'cover_segment', 'cover',
                         'brut_kar_marji', 'satis', 'alim_siparis'
                     ]]
                     
