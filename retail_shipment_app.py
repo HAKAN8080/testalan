@@ -476,10 +476,8 @@ elif menu == "🫧 Segmentasyon":
     # Ürün bazında toplam stok/satış hesapla
     data = st.session_state.anlik_stok_satis.copy()
     
-    # Ürün bazında gruplama
+    # Ürün bazında gruplama - SADECE MEVCUT KOLONLAR
     urun_aggregated = data.groupby('urun_kod').agg({
-        'urun_ad': 'first',
-        'marka_ad': 'first',
         'stok': 'sum',
         'yol': 'sum',
         'satis': 'sum',
@@ -488,9 +486,18 @@ elif menu == "🫧 Segmentasyon":
     urun_aggregated['stok_satis_orani'] = urun_aggregated['stok'] / urun_aggregated['satis'].replace(0, 1)
     urun_aggregated['cover'] = urun_aggregated['stok_satis_orani']
     
-    # Mağaza bazında gruplama
+    # Ürün adını master'dan ekle
+    if st.session_state.urun_master is not None:
+        urun_master = st.session_state.urun_master[['urun_kod', 'urun_ad', 'marka_ad']].copy()
+        urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
+        urun_aggregated['urun_kod'] = urun_aggregated['urun_kod'].astype(str)
+        urun_aggregated = urun_aggregated.merge(urun_master, on='urun_kod', how='left')
+    else:
+        urun_aggregated['urun_ad'] = 'Bilinmiyor'
+        urun_aggregated['marka_ad'] = 'Bilinmiyor'
+    
+    # Mağaza bazında gruplama - SADECE MEVCUT KOLONLAR
     magaza_aggregated = data.groupby('magaza_kod').agg({
-        'magaza_ad': 'first',
         'stok': 'sum',
         'yol': 'sum',
         'satis': 'sum',
@@ -498,6 +505,15 @@ elif menu == "🫧 Segmentasyon":
     }).reset_index()
     magaza_aggregated['stok_satis_orani'] = magaza_aggregated['stok'] / magaza_aggregated['satis'].replace(0, 1)
     magaza_aggregated['cover'] = magaza_aggregated['stok_satis_orani']
+    
+    # Mağaza adını master'dan ekle
+    if st.session_state.magaza_master is not None:
+        magaza_master = st.session_state.magaza_master[['magaza_kod', 'magaza_ad']].copy()
+        magaza_master['magaza_kod'] = magaza_master['magaza_kod'].astype(str)
+        magaza_aggregated['magaza_kod'] = magaza_aggregated['magaza_kod'].astype(str)
+        magaza_aggregated = magaza_aggregated.merge(magaza_master, on='magaza_kod', how='left')
+    else:
+        magaza_aggregated['magaza_ad'] = 'Bilinmiyor'
     
     st.markdown("---")
     
@@ -794,8 +810,7 @@ elif menu == "🫧 Segmentasyon":
                 data=zip_buffer.getvalue(),
                 file_name="segmentasyon_detay.zip",
                 mime="application/zip"
-            )
-            
+            ) 
 # ============================================
 # 🎲 HEDEF MATRİS
 # ============================================
