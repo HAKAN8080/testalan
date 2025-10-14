@@ -1477,7 +1477,7 @@ elif menu == "📐 Hesaplama":
                 
                 # Sonuç tablosu
                 result_final = result_df_max[[
-                    'Oncelik', 'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad',
+                    'Oncelik', 'magaza_kod', 'urun_kod',
                     'magaza_segment', 'urun_segment', 'Durum',
                     'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_gercek', 'depo_kod'
                 ]].rename(columns={
@@ -1487,18 +1487,33 @@ elif menu == "📐 Hesaplama":
                     'sevkiyat_gercek': 'sevkiyat_miktari'
                 })
                 
+                # Ürün ve mağaza adlarını master'lardan ekle
+                if st.session_state.urun_master is not None:
+                    urun_master = st.session_state.urun_master[['urun_kod', 'urun_ad']].copy()
+                    urun_master['urun_kod'] = urun_master['urun_kod'].astype(str)
+                    result_final['urun_kod'] = result_final['urun_kod'].astype(str)
+                    result_final = result_final.merge(urun_master, on='urun_kod', how='left')
+                else:
+                    result_final['urun_ad'] = 'Bilinmiyor'
+                
+                if st.session_state.magaza_master is not None:
+                    magaza_master = st.session_state.magaza_master[['magaza_kod', 'magaza_ad']].copy()
+                    magaza_master['magaza_kod'] = magaza_master['magaza_kod'].astype(str)
+                    result_final['magaza_kod'] = result_final['magaza_kod'].astype(str)
+                    result_final = result_final.merge(magaza_master, on='magaza_kod', how='left')
+                else:
+                    result_final['magaza_ad'] = 'Bilinmiyor'
+                
+                # Kolon sıralamasını düzenle
+                result_final = result_final[[
+                    'oncelik', 'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad',
+                    'magaza_segment', 'urun_segment', 'durum',
+                    'stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'depo_kod'
+                ]]
+                
                 result_final['stok_yoklugu_satis_kaybi'] = result_final['ihtiyac_miktari'] - result_final['sevkiyat_miktari']
                 result_final.insert(0, 'sira_no', range(1, len(result_final) + 1))
                 
-                st.session_state.sevkiyat_sonuc = result_final
-                
-                end_time = time.time()
-                calculation_time = end_time - start_time
-                
-                progress_bar.progress(100, text="Tamamlandı!")
-                
-                st.success("✅ Hesaplama tamamlandı!")
-                st.balloons()
                 
                 # Sonuç tablosu
                 st.markdown("---")
