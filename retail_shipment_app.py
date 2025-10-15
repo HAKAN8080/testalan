@@ -1630,11 +1630,24 @@ elif menu == "📐 Hesaplama":
                     
                     with col2:
                         st.write("**Marka Bazlı SK - En Yüksek 10 Ürün:**")
-                        marka_kayip = stok_yoklugu_df.groupby(['marka_ad', 'urun_ad']).agg({
-                            'ihtiyac_miktari': 'sum',
-                            'sevkiyat_miktari': 'sum',
-                            'stok_yoklugu_satis_kaybi': 'sum'
+                        # Kolon eşleştirmelerini otomatik belirle
+                        ihtiyac_col = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
+                        sevkiyat_col = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
+                        stok_kayip_col = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+                        
+                        urun_sevkiyat = result_df.groupby('urun_kod').agg({
+                            ihtiyac_col: 'sum',
+                            sevkiyat_col: 'sum',
+                            stok_kayip_col: 'sum'
                         }).reset_index()
+                        
+                        # Geriye uyumlu isimlendirme (raporda okunabilirlik için)
+                        urun_sevkiyat.rename(columns={
+                            ihtiyac_col: 'ihtiyac_miktari',
+                            sevkiyat_col: 'sevkiyat_miktari',
+                            stok_kayip_col: 'stok_yoklugu_satis_kaybi'
+                        }, inplace=True)
+
                         marka_kayip['SK %'] = (marka_kayip['stok_yoklugu_satis_kaybi'] / 
                                                marka_kayip['ihtiyac_miktari'] * 100).round(2)
                         marka_kayip = marka_kayip.nlargest(10, 'stok_yoklugu_satis_kaybi')[[
