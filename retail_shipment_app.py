@@ -1428,7 +1428,10 @@ elif menu == "📐 Hesaplama":
                 result_df = anlik_df[anlik_df['ihtiyac'] > 0].copy()
                 result_df_max = result_df.loc[result_df.groupby(['magaza_kod', 'urun_kod'])['ihtiyac'].idxmax()].copy()
                 result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)
-                
+
+                # Hesaplama tamamlandıktan sonra:
+                st.session_state.sevkiyat_sonuc = result_df_max.copy()
+
                 # Depo stok kontrolü
                 depo_stok_dict = {}
                 for _, row in depo_df.iterrows():
@@ -1684,6 +1687,7 @@ elif menu == "📐 Hesaplama":
                         file_name="sevkiyat_sonuclari.json",
                         mime="application/json"
                     )
+st.session_state.sevkiyat_sonuc = result_df_max.copy()
 
 # ============================================
 # 💵 ALIM SİPARİŞ - YENİ MANTIK
