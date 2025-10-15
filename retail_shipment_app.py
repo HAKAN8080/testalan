@@ -1687,7 +1687,7 @@ elif menu == "📐 Hesaplama":
                         file_name="sevkiyat_sonuclari.json",
                         mime="application/json"
                     )
-st.session_state.sevkiyat_sonuc = result_df_max.copy()
+                st.session_state.sevkiyat_sonuc = result_df_max.copy()
 
 # ============================================
 # 💵 ALIM SİPARİŞ - YENİ MANTIK
