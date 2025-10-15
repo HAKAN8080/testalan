@@ -2231,12 +2231,13 @@ elif menu == "📈 Raporlar":
             result_df['urun_kod'] = result_df['urun_kod'].astype(str)
             
             # Ürün bazında toplamlar
-            urun_sevkiyat = result_df.groupby('urun_kod').agg({
-                'ihtiyac_miktari': 'sum',
-                'sevkiyat_miktari': 'sum',
-                'magaza_kod': 'nunique',
-                'stok_yoklugu_satis_kaybi': 'sum'
+           urun_sevkiyat = result_df.groupby('urun_kod').agg({
+           # Eski isimler varsa onları kullan, yoksa mevcut isimlerle devam et
+            'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac': 'sum',
+            'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek': 'sum',
+            'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi': 'sum'
             }).reset_index()
+
             
             urun_sevkiyat.columns = ['urun_kod', 'İhtiyaç', 'Sevkiyat', 'Mağaza Sayısı', 'Satış Kaybı']
             
