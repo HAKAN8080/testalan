@@ -2213,7 +2213,7 @@ elif menu == "📈 Raporlar":
             st.write("**Temel İstatistikler:**")
             st.write(f"- Toplam satır: {len(result_df)}")
             st.write(f"- Sevkiyat miktarı > 0: {(result_df['sevkiyat_gercek'] > 0).sum()}")
-            st.write(f"- İhtiyaç miktarı > 0: {(result_df['ihtiyac_miktari'] > 0).sum()}")
+            st.write(f"- İhtiyaç miktarı > 0: {(result_df['ihtiyac'] > 0).sum()}")
         
         tab1, tab2, tab3 = st.tabs([
             "📦 Ürün Analizi",
