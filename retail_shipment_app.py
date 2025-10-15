@@ -1197,11 +1197,7 @@ elif menu == "📐 Hesaplama":
             st.metric("Yasak", yasak_count)
         
         st.markdown("---")
-        st.subheader("🏢 Depo-Mağaza Eşleşmeleri")
-        magaza_depo = st.session_state.magaza_master[['magaza_kod', 'magaza_ad', 'depo_kod']].copy()
-        st.dataframe(magaza_depo, use_container_width=True, height=200)
-        st.markdown("---")
-        
+              
         if st.button("🚀 Sevkiyat Hesapla", type="primary", use_container_width=True):
             start_time = time.time()
            
