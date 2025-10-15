@@ -2212,7 +2212,7 @@ elif menu == "📈 Raporlar":
             st.dataframe(result_df.head(), use_container_width=True)
             st.write("**Temel İstatistikler:**")
             st.write(f"- Toplam satır: {len(result_df)}")
-            st.write(f"- Sevkiyat miktarı > 0: {(result_df['sevkiyat_miktari'] > 0).sum()}")
+            st.write(f"- Sevkiyat miktarı > 0: {(result_df['sevkiyat_gercek'] > 0).sum()}")
             st.write(f"- İhtiyaç miktarı > 0: {(result_df['ihtiyac_miktari'] > 0).sum()}")
         
         tab1, tab2, tab3 = st.tabs([
