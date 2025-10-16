@@ -1915,7 +1915,6 @@ elif menu == "💵 Alım Sipariş":
                     st.warning("⚠️ SMM birim maliyet olarak algılandı. Toplam maliyet = SMM × Satış")
                     urun_toplam['toplam_smm'] = urun_toplam['smm'] * urun_toplam['satis']
                 else:
-                    st.info("ℹ️ SMM toplam maliyet olarak algılandı.")
                     urun_toplam['toplam_smm'] = urun_toplam['smm']
                 
                 urun_toplam['brut_kar'] = urun_toplam['ciro'] - urun_toplam['toplam_smm']
@@ -1927,7 +1926,6 @@ elif menu == "💵 Alım Sipariş":
                     0
                 )
                 
-                st.write(f"**💵 Debug: Brüt Kar Marjı aralığı:** {urun_toplam['brut_kar_marji'].min():.2f}% - {urun_toplam['brut_kar_marji'].max():.2f}%")
                 
                 # 5. COVER HESAPLA
                 urun_toplam['toplam_stok'] = (
@@ -1942,7 +1940,6 @@ elif menu == "💵 Alım Sipariş":
                     999
                 )
                 
-                st.write(f"**📈 Debug: Cover aralığı:** {urun_toplam['cover'].min():.2f} - {urun_toplam[urun_toplam['cover'] < 999]['cover'].max():.2f}")
                 
                 # 6. COVER SEGMENT ATAMASI
                 # Segmentasyon range'lerini al
