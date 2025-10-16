@@ -1155,6 +1155,31 @@ elif menu == "📐 Hesaplama":
     st.title("📐 Hesaplama")
     st.markdown("---")
     
+    # Session state kontrolü - önceki sonuçları koru
+    if 'sevkiyat_sonuc' not in st.session_state:
+        st.session_state.sevkiyat_sonuc = None
+    
+    # Daha önce hesaplanmış sonuç varsa göster
+    if st.session_state.sevkiyat_sonuc is not None:
+        st.success("✅ Daha önce hesaplanmış sevkiyat sonuçları mevcut!")
+        
+        # Önceki sonuçları hızlıca göster
+        result_final = st.session_state.sevkiyat_sonuc.copy()
+        
+        # Özet metrikler
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("📦 Toplam İhtiyaç", f"{result_final['ihtiyac_miktari'].sum():,.0f}")
+        with col2:
+            st.metric("✅ Toplam Sevkiyat", f"{result_final['sevkiyat_miktari'].sum():,.0f}")
+        with col3:
+            st.metric("⚠️ Stok Kaybı", f"{result_final['stok_yoklugu_satis_kaybi'].sum():,.0f}")
+        with col4:
+            st.metric("🏪 Mağaza Sayısı", f"{result_final['magaza_kod'].nunique()}")
+        
+        st.info("Yeni hesaplama yapmak isterseniz aşağıdaki butonu kullanın.")
+        st.markdown("---")
+    
     required_data = {
         "Ürün Master": st.session_state.urun_master,
         "Mağaza Master": st.session_state.magaza_master,
@@ -1181,7 +1206,10 @@ elif menu == "📐 Hesaplama":
         if optional_loaded:
             st.success(f"✅ Yüklü opsiyonel: {', '.join(optional_loaded)}")
     else:
-        st.success("✅ Tüm zorunlu veriler hazır!")
+        if st.session_state.sevkiyat_sonuc is None:
+            st.success("✅ Tüm zorunlu veriler hazır! Hesaplama yapabilirsiniz.")
+        else:
+            st.success("✅ Tüm zorunlu veriler hazır! Yeni hesaplama yapabilir veya mevcut sonuçları kullanabilirsiniz.")
         
         if optional_loaded:
             st.info(f"📌 Opsiyonel: {', '.join(optional_loaded)}")
@@ -1516,203 +1544,75 @@ elif menu == "📐 Hesaplama":
                 
                 progress_bar.progress(100, text="Tamamlandı!")
                 
-                # Hesaplama tamamlandı mesajını BURADA göster
-                st.success("✅ Hesaplama tamamlandı!")
-                
-                # Sonuçları session state'e kaydet
+                # SONUÇLARI SESSION STATE'E KAYDET - BU ÇOK ÖNEMLİ!
                 st.session_state.sevkiyat_sonuc = result_final.copy()
                 
-                # Sonuç tablosu - TABLO FORMATINDA GÖSTERİM
-                st.markdown("---")
-                st.subheader("📊 Sevkiyat Sonuçları")
+                # Hesaplama tamamlandı mesajını BURADA göster
+                st.success("✅ Hesaplama tamamlandı! Sonuçlar kaydedildi.")
                 
-                # Ana metrikler tablosu
-                st.markdown("### 📈 Performans Özeti")
-                
-                # Ana metrikler
-                toplam_ihtiyac = result_final['ihtiyac_miktari'].sum()
-                toplam_sevkiyat = result_final['sevkiyat_miktari'].sum()
-                toplam_kayip = result_final['stok_yoklugu_satis_kaybi'].sum()
-                sku_count = result_final[result_final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
-                magaza_count = result_final[result_final['sevkiyat_miktari'] > 0]['magaza_kod'].nunique()
-                kayip_oran = (toplam_kayip / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
-                
-                # Durum bazlı sevkiyatlar
-                rpt_sevk = result_final[result_final['durum'] == 'RPT']['sevkiyat_miktari'].sum()
-                initial_sevk = result_final[result_final['durum'] == 'Initial']['sevkiyat_miktari'].sum()
-                min_sevk = result_final[result_final['durum'] == 'Min']['sevkiyat_miktari'].sum()
-                
-                # Tablo oluştur
-                summary_data = {
-                    'Kategori': ['Genel', 'Genel', 'Genel', 'Genel', 'Genel', 'Genel', 'Durum', 'Durum', 'Durum'],
-                    'Metrik': [
-                        'Hesaplama Süresi', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 
-                        'SKU Sayısı', 'Mağaza Sayısı', 'Stok Kaybı Oranı',
-                        'RPT Sevkiyat', 'Initial Sevkiyat', 'Min Sevkiyat'
-                    ],
-                    'Değer': [
-                        f"{calculation_time:.1f}s",
-                        f"{toplam_ihtiyac:,.0f}",
-                        f"{toplam_sevkiyat:,.0f}",
-                        f"{sku_count}",
-                        f"{magaza_count}",
-                        f"{kayip_oran:.1f}%",
-                        f"{rpt_sevk:,.0f}",
-                        f"{initial_sevk:,.0f}",
-                        f"{min_sevk:,.0f}"
-                    ],
-                    'Açıklama': [
-                        'Toplam hesaplama süresi',
-                        'Tüm mağazaların toplam ihtiyacı',
-                        'Depodan yapılan toplam sevkiyat',
-                        'Sevkiyat yapılan ürün çeşidi sayısı',
-                        'Sevkiyat yapılan mağaza sayısı',
-                        'Stok yokluğundan kaynaklı kayıp oranı',
-                        'RPT durumundaki sevkiyat miktarı',
-                        'Yeni ürün sevkiyat miktarı',
-                        'Minimum stok sevkiyat miktarı'
-                    ]
-                }
-                
-                summary_df = pd.DataFrame(summary_data)
-                
-                # Tabloyu göster
-                st.dataframe(
-                    summary_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-                
-                st.markdown("---")
-                
-                # Durum bazlı oranlar
-                st.markdown("### 📊 Durum Bazlı Dağılım")
-                
-                durum_data = {
-                    'Durum': ['RPT', 'Initial', 'Min'],
-                    'Sevkiyat Miktarı': [rpt_sevk, initial_sevk, min_sevk],
-                    'Oran (%)': [
-                        (rpt_sevk / toplam_sevkiyat * 100) if toplam_sevkiyat > 0 else 0,
-                        (initial_sevk / toplam_sevkiyat * 100) if toplam_sevkiyat > 0 else 0,
-                        (min_sevk / toplam_sevkiyat * 100) if toplam_sevkiyat > 0 else 0
-                    ]
-                }
-                
-                durum_df = pd.DataFrame(durum_data)
-                durum_df['Oran (%)'] = durum_df['Oran (%)'].round(1)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.dataframe(
-                        durum_df,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                
-                with col2:
-                    # Basit bir pie chart için hazırlık
-                    if toplam_sevkiyat > 0:
-                        chart_data = durum_df.set_index('Durum')['Sevkiyat Miktarı']
-                        st.bar_chart(chart_data)
-                
-                st.markdown("---")
-                
-                # Stok yokluğu raporu
-                st.markdown("---")
-                st.subheader("⚠️ Stok Yokluğu Kaynaklı Satış Kaybı Raporu")
-                
-                stok_yoklugu_df = result_final[result_final['stok_yoklugu_satis_kaybi'] > 0].copy()
-                
-                if len(stok_yoklugu_df) > 0:
-                    st.warning(f"⚠️ {len(stok_yoklugu_df)} satırda stok yokluğu var! Toplam kayıp: {toplam_kayip:,.0f}")
-                    
-                    # Marka bilgisi ekle
-                    if st.session_state.urun_master is not None:
-                        urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad']].copy()
-                        urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str).apply(
-                            lambda x: str(int(float(x))) if '.' in str(x) else str(x)
-                        )
-                        stok_yoklugu_df = stok_yoklugu_df.merge(urun_marka, on='urun_kod', how='left')
-                    else:
-                        stok_yoklugu_df['marka_ad'] = 'Bilinmiyor'
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("**En Fazla Kayıp Olan 10 Satır:**")
-                        top_kayip = stok_yoklugu_df.nlargest(10, 'stok_yoklugu_satis_kaybi')[[
-                            'magaza_ad', 'urun_ad', 'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi'
-                        ]]
-                        st.dataframe(top_kayip, use_container_width=True)
-                    
-                    with col2:
-                        st.write("**Marka Bazlı SK - En Yüksek 10 Ürün:**")
-                        # Kolon isimlerini kontrol et ve uygun olanı kullan
-                        urun_sevkiyat = result_final.groupby('urun_kod').agg({
-                            'ihtiyac_miktari': 'sum',
-                            'sevkiyat_miktari': 'sum',
-                            'stok_yoklugu_satis_kaybi': 'sum'
-                        }).reset_index()
-                        
-                        # Marka bilgisi ekle
-                        if st.session_state.urun_master is not None:
-                            urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad', 'urun_ad']].copy()
-                            urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
-                            urun_sevkiyat['urun_kod'] = urun_sevkiyat['urun_kod'].astype(str)
-                            marka_kayip = urun_sevkiyat.merge(urun_marka, on='urun_kod', how='left')
-                        else:
-                            marka_kayip = urun_sevkiyat.copy()
-                            marka_kayip['marka_ad'] = 'Bilinmiyor'
-                            marka_kayip['urun_ad'] = 'Bilinmiyor'
-                        
-                        marka_kayip['SK %'] = (marka_kayip['stok_yoklugu_satis_kaybi'] / 
-                                               marka_kayip['ihtiyac_miktari'] * 100).round(2)
-                        marka_kayip = marka_kayip.nlargest(10, 'stok_yoklugu_satis_kaybi')[[
-                            'marka_ad', 'urun_ad', 'ihtiyac_miktari', 'sevkiyat_miktari', 
-                            'stok_yoklugu_satis_kaybi', 'SK %'
-                        ]]
-                        marka_kayip.columns = ['Marka', 'Ürün', 'İhtiyaç', 'Sevk', 'SK', 'SK %']
-                        st.dataframe(marka_kayip, use_container_width=True)
-                    
-                    st.download_button(
-                        label="📥 Stok Yokluğu Raporu İndir (CSV)",
-                        data=stok_yoklugu_df.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="stok_yoklugu_satis_kaybi.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.success("✅ Tüm ihtiyaçlar depo stoğundan karşılanabildi!")
-                
-                # Export butonları
-                st.markdown("---")
-                st.subheader("📥 Sonuçları Dışa Aktar")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.download_button(
-                        label="📥 CSV İndir",
-                        data=result_final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="sevkiyat_sonuclari.csv",
-                        mime="text/csv"
-                    )
-                
-                with col2:
-                    st.download_button(
-                        label="📥 Excel İndir",
-                        data=result_final.to_csv(index=False, encoding='utf-8-sig'),
-                        file_name="sevkiyat_sonuclari.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                
-                with col3:
-                    st.download_button(
-                        label="📥 JSON İndir",
-                        data=result_final.to_json(orient='records', force_ascii=False),
-                        file_name="sevkiyat_sonuclari.json",
-                        mime="application/json"
-                    )
+                # Sayfayı yenile (sonuçları göstermek için)
+                st.rerun()
 
+    # Sayfa yüklendiğinde sonuçları göster (yeniden hesaplama yapılmadıysa)
+    if st.session_state.sevkiyat_sonuc is not None:
+        st.markdown("---")
+        st.subheader("📊 Mevcut Sevkiyat Sonuçları")
+        
+        result_final = st.session_state.sevkiyat_sonuc.copy()
+        
+        # Ana metrikler tablosu
+        st.markdown("### 📈 Performans Özeti")
+        
+        # Ana metrikler
+        toplam_ihtiyac = result_final['ihtiyac_miktari'].sum()
+        toplam_sevkiyat = result_final['sevkiyat_miktari'].sum()
+        toplam_kayip = result_final['stok_yoklugu_satis_kaybi'].sum()
+        sku_count = result_final[result_final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
+        magaza_count = result_final[result_final['sevkiyat_miktari'] > 0]['magaza_kod'].nunique()
+        kayip_oran = (toplam_kayip / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
+        
+        # Durum bazlı sevkiyatlar
+        rpt_sevk = result_final[result_final['durum'] == 'RPT']['sevkiyat_miktari'].sum()
+        initial_sevk = result_final[result_final['durum'] == 'Initial']['sevkiyat_miktari'].sum()
+        min_sevk = result_final[result_final['durum'] == 'Min']['sevkiyat_miktari'].sum()
+        
+        # Tablo oluştur
+        summary_data = {
+            'Kategori': ['Genel', 'Genel', 'Genel', 'Genel', 'Genel', 'Genel', 'Durum', 'Durum', 'Durum'],
+            'Metrik': [
+                'Toplam İhtiyaç', 'Toplam Sevkiyat', 'Stok Kaybı', 
+                'SKU Sayısı', 'Mağaza Sayısı', 'Kayıp Oranı',
+                'RPT Sevkiyat', 'Initial Sevkiyat', 'Min Sevkiyat'
+            ],
+            'Değer': [
+                f"{toplam_ihtiyac:,.0f}",
+                f"{toplam_sevkiyat:,.0f}",
+                f"{toplam_kayip:,.0f}",
+                f"{sku_count}",
+                f"{magaza_count}",
+                f"{kayip_oran:.1f}%",
+                f"{rpt_sevk:,.0f}",
+                f"{initial_sevk:,.0f}",
+                f"{min_sevk:,.0f}"
+            ]
+        }
+        
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Tabloyu göster
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Temizle butonu
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🗑️ Sonuçları Temizle", type="secondary"):
+                st.session_state.sevkiyat_sonuc = None
+                st.success("✅ Sonuçlar temizlendi!")
+                st.rerun()
 # ============================================
 # 💵 ALIM SİPARİŞ - YENİ MANTIK
 # ============================================
