@@ -2199,7 +2199,7 @@ elif menu == "📈 Raporlar":
         
         tab1, tab2, tab3 = st.tabs([
             "📦 Ürün Analizi",
-            "🏪 Mağaza Analizi",
+            "🏪 Mağaza Analizi", 
             "⚠️ Satış Kaybı Analizi"
         ])
         
@@ -2341,14 +2341,16 @@ elif menu == "📈 Raporlar":
             
             with col1:
                 if len(top_10_urun) > 0:
-                    st.write("**Top 10 Ürün - Sevkiyat Miktarı:**")
+                    st.write("**Top 10 Ürün - Sevkiyat Miktarı**")
                     grafik_df = top_10_urun.set_index('Ürün Kodu' if 'Ürün Adı' not in top_10_urun.columns else 'Ürün Adı')[['Sevkiyat']]
                     st.bar_chart(grafik_df)
             
             with col2:
                 if len(filtered_urun) > 0:
-                    st.write("**Sevkiyat/İhtiyaç Oranı Dağılımı:**")
+                    st.write("**Sevkiyat/İhtiyaç Oranı Dağılımı**")
                     oran_dagilim = filtered_urun['Sevkiyat/İhtiyaç %'].value_counts(bins=10).sort_index()
+                    # Grafik etiketlerini düzelt
+                    oran_dagilim.index = [f"%{int(interval.left)}-%{int(interval.right)}" for interval in oran_dagilim.index]
                     st.bar_chart(oran_dagilim)
             
             st.markdown("---")
@@ -2482,14 +2484,16 @@ elif menu == "📈 Raporlar":
             
             with col1:
                 if len(filtered_magaza) > 0:
-                    st.write("**Top 10 Mağaza - İhtiyaç Miktarı:**")
+                    st.write("**Top 10 Mağaza - İhtiyaç Miktarı**")
                     top_10_magaza = filtered_magaza.head(10).set_index('Mağaza Adı' if 'Mağaza Adı' in filtered_magaza.columns else 'Mağaza Kod')[['Toplam İhtiyaç']]
                     st.bar_chart(top_10_magaza)
             
             with col2:
                 if len(filtered_magaza) > 0:
-                    st.write("**Gerçekleşme Oranı Dağılımı:**")
+                    st.write("**Gerçekleşme Oranı Dağılımı**")
                     basari_dagilim = filtered_magaza['Gerçekleşme %'].value_counts(bins=10).sort_index()
+                    # Grafik etiketlerini düzelt
+                    basari_dagilim.index = [f"%{int(interval.left)}-%{int(interval.right)}" for interval in basari_dagilim.index]
                     st.bar_chart(basari_dagilim)
             
             st.markdown("---")
@@ -2505,8 +2509,11 @@ elif menu == "📈 Raporlar":
                     'Satış Kaybı': 'sum'
                 }).reset_index()
                 
+                # YENİ HESAPLAMA: Toplam Sevkiyat / Mağaza Sayısı
+                bolge_ozet['Ortalama Sevkiyat/Mağaza'] = (bolge_ozet['Toplam Sevkiyat'] / bolge_ozet['Mağaza Kod']).round(0)
                 bolge_ozet['Gerçekleşme %'] = (bolge_ozet['Toplam Sevkiyat'] / bolge_ozet['Toplam İhtiyaç'] * 100).round(2)
-                bolge_ozet.columns = ['Bölge', 'Mağaza Sayısı', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 'Toplam Kayıp', 'Gerçekleşme %']
+                
+                bolge_ozet.columns = ['Bölge', 'Mağaza Sayısı', 'Toplam İhtiyaç', 'Toplam Sevkiyat', 'Toplam Kayıp', 'Ortalama Sevkiyat/Mağaza', 'Gerçekleşme %']
                 
                 col1, col2 = st.columns([1, 2])
                 with col1:
@@ -2516,14 +2523,15 @@ elif menu == "📈 Raporlar":
                             'Toplam İhtiyaç': '{:,.0f}',
                             'Toplam Sevkiyat': '{:,.0f}',
                             'Toplam Kayıp': '{:,.0f}',
+                            'Ortalama Sevkiyat/Mağaza': '{:,.0f}',
                             'Gerçekleşme %': '{:.1f}%'
                         }),
                         use_container_width=True
                     )
                 
                 with col2:
-                    st.write("**Bölge Bazında Gerçekleşme Oranları:**")
-                    bolge_chart = bolge_ozet.set_index('Bölge')[['Gerçekleşme %']]
+                    st.write("**Bölge Bazında Ortalama Sevkiyat/Mağaza**")
+                    bolge_chart = bolge_ozet.set_index('Bölge')[['Ortalama Sevkiyat/Mağaza']]
                     st.bar_chart(bolge_chart)
             
             st.download_button(
@@ -2730,7 +2738,6 @@ elif menu == "📈 Raporlar":
                 - Sevkiyat planlaması optimal şekilde çalıştı
                 - Stok dağıtımı dengeli ve verimli
                 """)
-
 
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
