@@ -1147,6 +1147,7 @@ elif menu == "🔢 Sıralama":
                 st.rerun()
         
         st.info("ℹ️ Kaydetmeseniz de default sıralama kullanılacaktır.")
+
 # ============================================
 # 🚚 HESAPLAMA
 # ============================================
@@ -1221,15 +1222,6 @@ elif menu == "📐 Hesaplama":
                 
                 progress_bar.progress(10, text="Yeni ürünler tespit ediliyor...")
 
-                progress_bar.progress(100, text="Tamamlandı!")
-                
-                # ↓↓↓ BU İKİ SATIRI EKLE ↓↓↓
-                end_time = time.time()
-                calculation_time = end_time - start_time
-                # ↑↑↑ BU İKİ SATIRI EKLE ↑↑↑
-                
-                st.success("✅ Hesaplama tamamlandı!")
-                
                 # YENİ ÜRÜN TESPİTİ
                 depo_df_temp = depo_df.copy()
                 depo_df_temp['urun_kod'] = depo_df_temp['urun_kod'].astype(str).apply(
@@ -1424,9 +1416,6 @@ elif menu == "📐 Hesaplama":
                 result_df_max = result_df.loc[result_df.groupby(['magaza_kod', 'urun_kod'])['ihtiyac'].idxmax()].copy()
                 result_df_max = result_df_max.sort_values('Oncelik').reset_index(drop=True)
 
-                # Hesaplama tamamlandıktan sonra:
-                st.session_state.sevkiyat_sonuc = result_df_max.copy()
-
                 # Depo stok kontrolü
                 depo_stok_dict = {}
                 for _, row in depo_df.iterrows():
@@ -1486,12 +1475,13 @@ elif menu == "📐 Hesaplama":
                 result_final = result_df_max[[
                     'Oncelik', 'magaza_kod', 'urun_kod',
                     'magaza_segment', 'urun_segment', 'Durum',
-                    'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_gercek', 'depo_kod'
+                    'stok', 'yol', 'satis', 'ihtiyac', 'sevkiyat_gercek', 'depo_kod', 'stok_yoklugu_kaybi'
                 ]].rename(columns={
                     'Oncelik': 'oncelik',
                     'Durum': 'durum',
                     'ihtiyac': 'ihtiyac_miktari',
-                    'sevkiyat_gercek': 'sevkiyat_miktari'
+                    'sevkiyat_gercek': 'sevkiyat_miktari',
+                    'stok_yoklugu_kaybi': 'stok_yoklugu_satis_kaybi'
                 })
                 
                 # Ürün ve mağaza adlarını master'lardan ekle
@@ -1515,12 +1505,22 @@ elif menu == "📐 Hesaplama":
                 result_final = result_final[[
                     'oncelik', 'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad',
                     'magaza_segment', 'urun_segment', 'durum',
-                    'stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'depo_kod'
+                    'stok', 'yol', 'satis', 'ihtiyac_miktari', 'sevkiyat_miktari', 'depo_kod', 'stok_yoklugu_satis_kaybi'
                 ]]
                 
-                result_final['stok_yoklugu_satis_kaybi'] = result_final['ihtiyac_miktari'] - result_final['sevkiyat_miktari']
                 result_final.insert(0, 'sira_no', range(1, len(result_final) + 1))
                 
+                # Hesaplama süresini hesapla
+                end_time = time.time()
+                calculation_time = end_time - start_time
+                
+                progress_bar.progress(100, text="Tamamlandı!")
+                
+                # Hesaplama tamamlandı mesajını BURADA göster
+                st.success("✅ Hesaplama tamamlandı!")
+                
+                # Sonuçları session state'e kaydet
+                st.session_state.sevkiyat_sonuc = result_final.copy()
                 
                 # Sonuç tablosu
                 st.markdown("---")
@@ -1530,40 +1530,40 @@ elif menu == "📐 Hesaplama":
                 col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
                 
                 with col1:
-                    st.metric("⏱️", f"{calculation_time:.1f}s", "Süre")
+                    st.metric("⏱️", f"{calculation_time:.1f}s", "Süre", help="Hesaplama süresi")
                 with col2:
                     ihtiyac_val = result_final['ihtiyac_miktari'].sum()
                     if ihtiyac_val >= 1000:
-                        st.metric("📦", f"{ihtiyac_val/1000:.0f}K", "İhtiyaç")
+                        st.metric("📦", f"{ihtiyac_val/1000:.0f}K", "İhtiyaç", help="Toplam ihtiyaç miktarı")
                     else:
-                        st.metric("📦", f"{ihtiyac_val:.0f}", "İhtiyaç")
+                        st.metric("📦", f"{ihtiyac_val:.0f}", "İhtiyaç", help="Toplam ihtiyaç miktarı")
                 with col3:
                     sevk_val = result_final['sevkiyat_miktari'].sum()
                     if sevk_val >= 1000:
-                        st.metric("✅", f"{sevk_val/1000:.0f}K", "Sevk")
+                        st.metric("✅", f"{sevk_val/1000:.0f}K", "Sevk", help="Toplam sevkiyat miktarı")
                     else:
-                        st.metric("✅", f"{sevk_val:.0f}", "Sevk")
+                        st.metric("✅", f"{sevk_val:.0f}", "Sevk", help="Toplam sevkiyat miktarı")
                 with col4:
                     sku_count = result_final[result_final['sevkiyat_miktari'] > 0]['urun_kod'].nunique()
-                    st.metric("🏷️", f"{sku_count}", "SKU")
+                    st.metric("🏷️", f"{sku_count}", "SKU", help="Sevkiyat yapılan ürün sayısı")
                 with col5:
                     magaza_count = result_final[result_final['sevkiyat_miktari'] > 0]['magaza_kod'].nunique()
-                    st.metric("🏪", f"{magaza_count}", "Mağaza")
+                    st.metric("🏪", f"{magaza_count}", "Mağaza", help="Sevkiyat yapılan mağaza sayısı")
                 with col6:
                     sevk_per_magaza = result_final['sevkiyat_miktari'].sum() / magaza_count if magaza_count > 0 else 0
                     if sevk_per_magaza >= 1000:
-                        st.metric("📊", f"{sevk_per_magaza/1000:.1f}K", "Sevk/Mğz")
+                        st.metric("📊", f"{sevk_per_magaza/1000:.1f}K", "Sevk/Mğz", help="Mağaza başına ortalama sevkiyat")
                     else:
-                        st.metric("📊", f"{sevk_per_magaza:.0f}", "Sevk/Mğz")
+                        st.metric("📊", f"{sevk_per_magaza:.0f}", "Sevk/Mğz", help="Mağaza başına ortalama sevkiyat")
                 with col7:
                     sk_val = result_final['stok_yoklugu_satis_kaybi'].sum()
                     if sk_val >= 1000:
-                        st.metric("⚠️", f"{sk_val/1000:.0f}K", "SK")
+                        st.metric("⚠️", f"{sk_val/1000:.0f}K", "SK", help="Stok yokluğu kaybı")
                     else:
-                        st.metric("⚠️", f"{sk_val:.0f}", "SK")
+                        st.metric("⚠️", f"{sk_val:.0f}", "SK", help="Stok yokluğu kaybı")
                 with col8:
                     sk_oran = (result_final['stok_yoklugu_satis_kaybi'].sum() / result_final['ihtiyac_miktari'].sum() * 100) if result_final['ihtiyac_miktari'].sum() > 0 else 0
-                    st.metric("📉", f"{sk_oran:.1f}%", "SK%")
+                    st.metric("📉", f"{sk_oran:.1f}%", "SK%", help="Stok yokluğu oranı")
                 
                 # Metrikler - İkinci satır (KÜÇÜLTÜLMÜŞ - %60 boyut)
                 st.markdown("---")
@@ -1576,28 +1576,28 @@ elif menu == "📐 Hesaplama":
                 
                 with col1:
                     if rpt_sevk >= 1000:
-                        st.metric("🚀", f"{rpt_sevk/1000:.0f}K", "RPT")
+                        st.metric("🚀", f"{rpt_sevk/1000:.0f}K", "RPT", help="RPT durumundaki sevkiyat")
                     else:
-                        st.metric("🚀", f"{rpt_sevk:.0f}", "RPT")
+                        st.metric("🚀", f"{rpt_sevk:.0f}", "RPT", help="RPT durumundaki sevkiyat")
                 with col2:
                     rpt_oran = (rpt_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("", f"{rpt_oran:.1f}%", "RPT %")
+                    st.metric("", f"{rpt_oran:.1f}%", "RPT %", help="RPT sevkiyat oranı")
                 with col3:
                     if initial_sevk >= 1000:
-                        st.metric("🆕", f"{initial_sevk/1000:.0f}K", "Initial")
+                        st.metric("🆕", f"{initial_sevk/1000:.0f}K", "Initial", help="Initial durumundaki sevkiyat")
                     else:
-                        st.metric("🆕", f"{initial_sevk:.0f}", "Initial")
+                        st.metric("🆕", f"{initial_sevk:.0f}", "Initial", help="Initial durumundaki sevkiyat")
                 with col4:
                     initial_oran = (initial_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("", f"{initial_oran:.1f}%", "Init %")
+                    st.metric("", f"{initial_oran:.1f}%", "Init %", help="Initial sevkiyat oranı")
                 with col5:
                     if min_sevk >= 1000:
-                        st.metric("📌", f"{min_sevk/1000:.0f}K", "Min")
+                        st.metric("📌", f"{min_sevk/1000:.0f}K", "Min", help="Min durumundaki sevkiyat")
                     else:
-                        st.metric("📌", f"{min_sevk:.0f}", "Min")
+                        st.metric("📌", f"{min_sevk:.0f}", "Min", help="Min durumundaki sevkiyat")
                 with col6:
                     min_oran = (min_sevk / toplam_sevk * 100) if toplam_sevk > 0 else 0
-                    st.metric("", f"{min_oran:.1f}%", "Min %")
+                    st.metric("", f"{min_oran:.1f}%", "Min %", help="Min sevkiyat oranı")
                 
                 st.markdown("---")
                 
@@ -1630,29 +1630,38 @@ elif menu == "📐 Hesaplama":
                     
                     with col2:
                         st.write("**Marka Bazlı SK - En Yüksek 10 Ürün:**")
-                        # Kolon eşleştirmelerini otomatik belirle
-                        ihtiyac_col = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
-                        sevkiyat_col = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
-                        stok_kayip_col = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+                        # Kolon isimlerini kontrol et ve uygun olanı kullan
+                        if 'ihtiyac_miktari' in result_final.columns:
+                            ihtiyac_col = 'ihtiyac_miktari'
+                            sevkiyat_col = 'sevkiyat_miktari'
+                            stok_kayip_col = 'stok_yoklugu_satis_kaybi'
+                        else:
+                            ihtiyac_col = 'ihtiyac'
+                            sevkiyat_col = 'sevkiyat_gercek'
+                            stok_kayip_col = 'stok_yoklugu_kaybi'
                         
-                        urun_sevkiyat = result_df.groupby('urun_kod').agg({
+                        urun_sevkiyat = result_final.groupby('urun_kod').agg({
                             ihtiyac_col: 'sum',
                             sevkiyat_col: 'sum',
                             stok_kayip_col: 'sum'
                         }).reset_index()
                         
-                        # Geriye uyumlu isimlendirme (raporda okunabilirlik için)
-                        urun_sevkiyat.rename(columns={
-                            ihtiyac_col: 'ihtiyac_miktari',
-                            sevkiyat_col: 'sevkiyat_miktari',
-                            stok_kayip_col: 'stok_yoklugu_satis_kaybi'
-                        }, inplace=True)
-
-                        marka_kayip['SK %'] = (marka_kayip['stok_yoklugu_satis_kaybi'] / 
-                                               marka_kayip['ihtiyac_miktari'] * 100).round(2)
-                        marka_kayip = marka_kayip.nlargest(10, 'stok_yoklugu_satis_kaybi')[[
-                            'marka_ad', 'urun_ad', 'ihtiyac_miktari', 'sevkiyat_miktari', 
-                            'stok_yoklugu_satis_kaybi', 'SK %'
+                        # Marka bilgisi ekle
+                        if st.session_state.urun_master is not None:
+                            urun_marka = st.session_state.urun_master[['urun_kod', 'marka_ad', 'urun_ad']].copy()
+                            urun_marka['urun_kod'] = urun_marka['urun_kod'].astype(str)
+                            urun_sevkiyat['urun_kod'] = urun_sevkiyat['urun_kod'].astype(str)
+                            marka_kayip = urun_sevkiyat.merge(urun_marka, on='urun_kod', how='left')
+                        else:
+                            marka_kayip = urun_sevkiyat.copy()
+                            marka_kayip['marka_ad'] = 'Bilinmiyor'
+                            marka_kayip['urun_ad'] = 'Bilinmiyor'
+                        
+                        marka_kayip['SK %'] = (marka_kayip[stok_kayip_col] / 
+                                               marka_kayip[ihtiyac_col] * 100).round(2)
+                        marka_kayip = marka_kayip.nlargest(10, stok_kayip_col)[[
+                            'marka_ad', 'urun_ad', ihtiyac_col, sevkiyat_col, 
+                            stok_kayip_col, 'SK %'
                         ]]
                         marka_kayip.columns = ['Marka', 'Ürün', 'İhtiyaç', 'Sevk', 'SK', 'SK %']
                         st.dataframe(marka_kayip, use_container_width=True)
@@ -1695,7 +1704,6 @@ elif menu == "📐 Hesaplama":
                         file_name="sevkiyat_sonuclari.json",
                         mime="application/json"
                     )
-                st.session_state.sevkiyat_sonuc = result_df_max.copy()
 
 # ============================================
 # 💵 ALIM SİPARİŞ - YENİ MANTIK
