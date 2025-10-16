@@ -1746,12 +1746,6 @@ elif menu == "💵 Alım Sipariş":
     # Filtreler
     st.subheader("🎯 Hesaplama Filtreleri")
     
-    st.info("""
-    **Filtre Mantığı:**
-    - Cover < X: Düşük stoklu ürünler için
-    - Brüt Kar Marjı > Y%: Yüksek karlı ürünler için
-    - İki koşul da sağlanırsa alım sipariş hesaplanır
-    """)
     
     col1, col2 = st.columns(2)
     
@@ -1767,7 +1761,7 @@ elif menu == "💵 Alım Sipariş":
     
     with col2:
         margin_threshold = st.number_input(
-            "Brüt Kar Marjı > Y% için hesapla",
+            "Brüt Kar Marjı > % Y için hesapla",
             min_value=-100.0,
             max_value=100.0,
             value=10.0,
