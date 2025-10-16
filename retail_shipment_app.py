@@ -1173,7 +1173,7 @@ elif menu == "📐 Hesaplama":
         with col2:
             st.metric("✅ Toplam Sevkiyat", f"{result_final['sevkiyat_miktari'].sum():,.0f}")
         with col3:
-            st.metric("⚠️ Stok Kaybı", f"{result_final['stok_yoklugu_satis_kaybi'].sum():,.0f}")
+            st.metric("⚠️ Satış Kaybı", f"{result_final['stok_yoklugu_satis_kaybi'].sum():,.0f}")
         with col4:
             st.metric("🏪 Mağaza Sayısı", f"{result_final['magaza_kod'].nunique()}")
         
