@@ -2743,8 +2743,37 @@ elif menu == "📈 Raporlar":
         # ============================================
         # İL BAZINDA HARİTA - YENİ TAB
         # ============================================
+        # ============================================
+        # İL BAZINDA HARİTA - YENİ TAB
+        # ============================================
         with tab4:
             st.subheader("🗺️ İl Bazında Sevkiyat Haritası")
+            
+            # Python ve plotly bilgilerini göster
+            import sys
+            st.write(f"**Python yolu:** {sys.executable}")
+            st.write(f"**Python versiyonu:** {sys.version}")
+            
+            # Plotly kontrolü
+            try:
+                import plotly
+                st.success(f"✅ Plotly yüklü! Versiyon: {plotly.__version__}")
+                st.write(f"**Plotly yolu:** {plotly.__file__}")
+                
+                import plotly.express as px
+                st.success("✅ Plotly.express başarıyla import edildi!")
+                
+            except ImportError as e:
+                st.error(f"❌ Plotly import hatası: {e}")
+                st.info("""
+                **Çözüm için:**
+                Lütfen Streamlit'i çalıştırdığınız terminalde şu komutları sırayla çalıştırın:
+                ```bash
+                pip install plotly
+                ```
+                Sonra uygulamayı yeniden başlatın.
+                """)
+                st.stop()
             
             if st.session_state.magaza_master is None:
                 st.warning("⚠️ Mağaza Master verisi yüklenmemiş! Harita için il bilgisi gerekiyor.")
