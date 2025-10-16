@@ -1574,8 +1574,7 @@ elif menu == "📐 Hesaplama":
                 except Exception as e:
                     st.warning(f"CSV oluşturulurken hata oluştu: {e}")
  
-                # Sayfayı yenile (sonuçları göstermek için)
-                st.rerun()
+             
 
     # Sayfa yüklendiğinde sonuçları göster (yeniden hesaplama yapılmadıysa)
     if st.session_state.sevkiyat_sonuc is not None:
