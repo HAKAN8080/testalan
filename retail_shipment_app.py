@@ -2740,7 +2740,7 @@ elif menu == "📈 Raporlar":
                 - Stok dağıtımı dengeli ve verimli
                 """)
         
-        # ============================================
+                # ============================================
 # İL BAZINDA HARİTA - YENİ TAB
 # ============================================
 with tab4:
@@ -2860,24 +2860,18 @@ with tab4:
                 color="Performans Segmenti",
                 color_discrete_map=renk_skalasi,
                 size="Ortalama Sevkiyat/Mağaza",
-                size_max=25,  # Daire boyutu biraz küçültüldü
-                zoom=4.5,     # ZOOM OUT - daha geniş görünüm (önceki: 5.2)
-                center={"lat": 39.0, "lon": 35.0},  # Türkiye'nin merkezine odaklan
+                size_max=25,
+                zoom=4.5,  # ZOOM OUT - daha geniş görünüm
+                center={"lat": 39.0, "lon": 35.0},
                 height=600,
                 title="Türkiye İl Bazında Ortalama Sevkiyat/Mağaza Dağılımı"
             )
             
             fig.update_layout(
                 mapbox_style="open-street-map",
-                margin={"r": 0, "t": 30, "l": 0, "b": 0},
-                # Harita kontrollerini ekle
-                mapbox=dict(
-                    bearing=0,
-                    pitch=0
-                )
+                margin={"r": 0, "t": 30, "l": 0, "b": 0}
             )
             
-            # Kullanıcı zoom seviyesini ayarlayabilir
             st.info("🔍 Haritayı mouse tekerleği ile zoom in/out yapabilir, sürükleyerek hareket ettirebilirsiniz.")
             
             st.plotly_chart(fig, use_container_width=True)
@@ -2982,7 +2976,6 @@ with tab4:
         
         else:
             st.warning("Harita için yeterli il verisi bulunamadı.")
-
 
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
