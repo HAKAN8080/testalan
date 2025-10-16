@@ -1549,7 +1549,31 @@ elif menu == "📐 Hesaplama":
                 
                 # Hesaplama tamamlandı mesajını BURADA göster
                 st.success("✅ Hesaplama tamamlandı! Sonuçlar kaydedildi.")
-                
+                            # -------------------------------
+            # CSV İNDİRME BUTONU (Hesaplama Sonrası)
+            # -------------------------------
+            if 'result_df' in locals() and not result_df.empty:
+                try:
+                    # CSV için gerekli sütunları filtrele
+                    detayli_df = result_df[[
+                        'urun_kod', 'magaza_kod', 'mağaza_grup', 'ürün_grup',
+                        'satış', 'stok', 'yol', 'ihtiyaç', 'depo_stok',
+                        'sevk_miktari', 'svk_tipi'
+                    ]].copy()
+
+                    # CSV'yi bellek üzerinden indirilebilir hale getir
+                    csv_bytes = detayli_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+
+                    st.download_button(
+                        label="📥 Detaylı Sevkiyat CSV İndir",
+                        data=csv_bytes,
+                        file_name=f"detayli_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime='text/csv',
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.warning(f"CSV oluşturulurken hata oluştu: {e}")
+ 
                 # Sayfayı yenile (sonuçları göstermek için)
                 st.rerun()
 
