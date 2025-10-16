@@ -1557,8 +1557,7 @@ elif menu == "📐 Hesaplama":
                     # CSV için gerekli sütunları filtrele
                     detayli_df = result_df[[
                         'urun_kod', 'magaza_kod', 'mağaza_grup', 'ürün_grup',
-                        'satış', 'stok', 'yol', 'ihtiyaç', 'depo_stok',
-                        'sevk_miktari', 'svk_tipi'
+                        'satış', 'stok', 'yol', 'ihtiyaç', 'depo_stok'
                     ]].copy()
 
                     # CSV'yi bellek üzerinden indirilebilir hale getir
