@@ -1774,12 +1774,6 @@ elif menu == "💵 Alım Sipariş":
     # 5. Matris - Cover Segment Katsayıları
     st.subheader("📊 5. Matris: Cover Segment Genişletme Katsayıları")
     
-    st.info("""
-    **Bu matris sadece alım sipariş hesaplaması için kullanılır.**
-    
-    Her cover segment (0-4, 5-8, vb.) için farklı genişletme katsayısı tanımlayabilirsiniz.
-    Formülde: Talep = Satış × **Genişletme Katsayısı** × (Forward Cover + 2)
-    """)
     
     # Segmentasyon parametrelerini al
     product_ranges = st.session_state.segmentation_params['product_ranges']
