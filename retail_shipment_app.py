@@ -1549,7 +1549,8 @@ elif menu == "📐 Hesaplama":
                 
                 # Hesaplama tamamlandı mesajını BURADA göster
                 st.success("✅ Hesaplama tamamlandı! Sonuçlar kaydedildi.")
-                            # -------------------------------
+            
+            # -------------------------------
             # CSV İNDİRME BUTONU (Hesaplama Sonrası)
             # -------------------------------
             if 'result_df' in locals() and not result_df.empty:
@@ -1576,6 +1577,7 @@ elif menu == "📐 Hesaplama":
              
 
     # Sayfa yüklendiğinde sonuçları göster (yeniden hesaplama yapılmadıysa)
+        # Sayfa yüklendiğinde sonuçları göster (yeniden hesaplama yapılmadıysa)
     if st.session_state.sevkiyat_sonuc is not None:
         st.markdown("---")
         st.subheader("📊 Mevcut Sevkiyat Sonuçları")
@@ -1621,20 +1623,57 @@ elif menu == "📐 Hesaplama":
         
         summary_df = pd.DataFrame(summary_data)
         
-        # Tabloyu göster
+        # Performans özetini göster
         st.dataframe(
             summary_df,
             use_container_width=True,
             hide_index=True
         )
-        
-        # Temizle butonu
+
+        # ------------------------------------------
+        # 📥 DETAYLI SEVKİYAT CSV İNDİRME BUTONU
+        # ------------------------------------------
+        try:
+            detayli_df = result_final[[
+                'urun_kod', 'magaza_kod',
+                'magaza_segment', 'urun_segment',
+                'satis', 'stok', 'yol',
+                'ihtiyac_miktari', 'sevkiyat_miktari', 'durum'
+            ]].copy()
+
+            detayli_df = detayli_df.rename(columns={
+                'magaza_segment': 'mağaza_grup',
+                'urun_segment': 'ürün_grup',
+                'satis': 'satış',
+                'ihtiyac_miktari': 'ihtiyaç',
+                'sevkiyat_miktari': 'sevk_miktari',
+                'durum': 'svk_tipi'
+            })
+
+            csv_bytes = detayli_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+
+            st.download_button(
+                label="📥 Detaylı Sevkiyat CSV İndir",
+                data=csv_bytes,
+                file_name=f"detayli_sevkiyat_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime='text/csv',
+                use_container_width=True
+            )
+        except Exception as e:
+            st.warning(f"CSV oluşturulurken hata oluştu: {e}")
+
+        # ------------------------------------------
+        # 🧾 SONUÇLARI TEMİZLE BUTONU
+        # ------------------------------------------
+        st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             if st.button("🗑️ Sonuçları Temizle", type="secondary"):
                 st.session_state.sevkiyat_sonuc = None
                 st.success("✅ Sonuçlar temizlendi!")
                 st.rerun()
+
+
 # ============================================
 # 💵 ALIM SİPARİŞ - YENİ MANTIK
 # ============================================
