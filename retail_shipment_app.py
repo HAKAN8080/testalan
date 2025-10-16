@@ -1880,19 +1880,19 @@ elif menu == "💵 Alım Sipariş":
                     'smm': 'sum'
                 }).reset_index(drop=True)
                 
-                st.write(f"**🏷️ Debug: Ürün bazında toplam:** {len(urun_toplam):,} ürün")
+                st.write(f"**🏷️  Ürün bazında toplam:** {len(urun_toplam):,} ürün")
                 
                 # 3. DEPO STOK EKLE
                 depo_toplam = depo_df.groupby('urun_kod')['stok'].sum().reset_index()
                 depo_toplam.columns = ['urun_kod', 'depo_stok']
                 
-                st.write(f"**📦 Debug: Depo stok:** {len(depo_toplam):,} ürün, Toplam: {depo_toplam['depo_stok'].sum():,.0f}")
+                st.write(f"**📦 Depo stok:** {len(depo_toplam):,} ürün, Toplam: {depo_toplam['depo_stok'].sum():,.0f}")
                 
                 urun_toplam = urun_toplam.merge(depo_toplam, on='urun_kod', how='left')
                 urun_toplam['depo_stok'] = urun_toplam['depo_stok'].fillna(0)
                 
                 # 4. BRÜT KAR VE MARJ HESAPLA
-                st.write("**💰 Debug: SMM ve Ciro kontrol (ilk 5 ürün):**")
+                st.write("**💰  SMM ve Ciro kontrol (ilk 5 ürün):**")
                 sample = urun_toplam[['urun_kod', 'satis', 'ciro', 'smm']].head(5)
                 st.dataframe(sample)
                 
@@ -1979,7 +1979,7 @@ elif menu == "💵 Alım Sipariş":
                 )
                 
                 filtre_sayisi = urun_toplam['filtre_uygun'].sum()
-                st.write(f"**✅ Debug: Filtreye uygun ürün:** {filtre_sayisi}")
+                st.write(f"**✅ Filtreye uygun ürün:** {filtre_sayisi}")
                 st.write(f"   - Cover < {cover_threshold}: {(urun_toplam['cover'] < cover_threshold).sum()}")
                 st.write(f"   - Brüt Kar Marjı > {margin_threshold}%: {(urun_toplam['brut_kar_marji'] > margin_threshold).sum()}")
                 
@@ -2012,8 +2012,8 @@ elif menu == "💵 Alım Sipariş":
                     axis=1
                 )
                 
-                st.write(f"**📦 Debug: Alım sipariş > 0 olan ürün:** {(urun_toplam['alim_siparis'] > 0).sum()}")
-                st.write(f"**📦 Debug: Toplam alım sipariş:** {urun_toplam['alim_siparis'].sum():,.0f}")
+                st.write(f"**📦  Alım sipariş > 0 olan ürün:** {(urun_toplam['alim_siparis'] > 0).sum()}")
+                st.write(f"**📦  Toplam alım sipariş:** {urun_toplam['alim_siparis'].sum():,.0f}")
                 
                 # 11. SONUÇLARI HAZIRLA
                 sonuc_df = urun_toplam[[
