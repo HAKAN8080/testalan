@@ -2126,7 +2126,6 @@ elif menu == "💵 Alım Sipariş":
             import traceback
             st.code(traceback.format_exc())
 
-
 # ============================================
 # 📈 RAPORLAR - DÜZENLENMİŞ VERSİYON
 # ============================================
@@ -2187,8 +2186,16 @@ elif menu == "📈 Raporlar":
             st.dataframe(result_df.head(), use_container_width=True)
             st.write("**Temel İstatistikler:**")
             st.write(f"- Toplam satır: {len(result_df)}")
-            st.write(f"- Sevkiyat miktarı > 0: {(result_df['sevkiyat_gercek'] > 0).sum()}")
-            st.write(f"- İhtiyaç miktarı > 0: {(result_df['ihtiyac'] > 0).sum()}")
+            
+            # KOLON ADI DÜZELTMESİ: sevkiyat_gercek -> sevkiyat_miktari
+            sevkiyat_kolon_adi = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
+            ihtiyac_kolon_adi = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
+            kayip_kolon_adi = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+            
+            if sevkiyat_kolon_adi in result_df.columns:
+                st.write(f"- Sevkiyat miktarı > 0: {(result_df[sevkiyat_kolon_adi] > 0).sum()}")
+            if ihtiyac_kolon_adi in result_df.columns:
+                st.write(f"- İhtiyaç miktarı > 0: {(result_df[ihtiyac_kolon_adi] > 0).sum()}")
         
         tab1, tab2, tab3 = st.tabs([
             "📦 Ürün Analizi",
@@ -2205,15 +2212,20 @@ elif menu == "📈 Raporlar":
             # Ürün kodlarını temizle
             result_df['urun_kod'] = result_df['urun_kod'].astype(str)
             
+            # KOLON ADI DÜZELTMESİ
+            sevkiyat_kolon = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
+            ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
+            kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+            
             # Ürün bazında toplamlar
             urun_sevkiyat = result_df.groupby('urun_kod').agg({
-                'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac': 'sum',
-                'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek': 'sum',
-                'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi': 'sum'
+                ihtiyac_kolon: 'sum',
+                sevkiyat_kolon: 'sum',
+                kayip_kolon: 'sum',
+                'magaza_kod': 'nunique'
             }).reset_index()
 
-            
-            urun_sevkiyat.columns = ['urun_kod', 'İhtiyaç', 'Sevkiyat', 'Mağaza Sayısı', 'Satış Kaybı']
+            urun_sevkiyat.columns = ['urun_kod', 'İhtiyaç', 'Sevkiyat', 'Satış Kaybı', 'Mağaza Sayısı']
             
             # Hesaplamalar
             urun_sevkiyat['Sevkiyat/İhtiyaç %'] = np.where(
@@ -2250,7 +2262,7 @@ elif menu == "📈 Raporlar":
             else:
                 # Ürün master yoksa sadece kodlarla çalış
                 urun_sevkiyat.columns = [
-                    'Ürün Kodu', 'İhtiyaç', 'Sevkiyat', 'Mağaza Sayısı', 'Satış Kaybı',
+                    'Ürün Kodu', 'İhtiyaç', 'Sevkiyat', 'Satış Kaybı', 'Mağaza Sayısı',
                     'Sevkiyat/İhtiyaç %', 'Kayıp Oranı %'
                 ]
             
@@ -2366,11 +2378,16 @@ elif menu == "📈 Raporlar":
         with tab2:
             st.subheader("🏪 Mağaza Bazında Analiz")
             
+            # KOLON ADI DÜZELTMESİ
+            sevkiyat_kolon = 'sevkiyat_miktari' if 'sevkiyat_miktari' in result_df.columns else 'sevkiyat_gercek'
+            ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
+            kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+            
             # Mağaza bazında toplamlar
             magaza_ozet = result_df.groupby('magaza_kod').agg({
-                'ihtiyac_miktari': 'sum',
-                'sevkiyat_miktari': 'sum',
-                'stok_yoklugu_satis_kaybi': 'sum',
+                ihtiyac_kolon: 'sum',
+                sevkiyat_kolon: 'sum',
+                kayip_kolon: 'sum',
                 'urun_kod': 'nunique'
             }).reset_index()
             
@@ -2523,7 +2540,11 @@ elif menu == "📈 Raporlar":
         with tab3:
             st.subheader("⚠️ Stok Yokluğu Kaynaklı Satış Kaybı Analizi")
             
-            kayip_df = result_df[result_df['stok_yoklugu_satis_kaybi'] > 0].copy()
+            # KOLON ADI DÜZELTMESİ
+            kayip_kolon = 'stok_yoklugu_satis_kaybi' if 'stok_yoklugu_satis_kaybi' in result_df.columns else 'stok_yoklugu_kaybi'
+            ihtiyac_kolon = 'ihtiyac_miktari' if 'ihtiyac_miktari' in result_df.columns else 'ihtiyac'
+            
+            kayip_df = result_df[result_df[kayip_kolon] > 0].copy()
             
             if len(kayip_df) > 0:
                 # Metrikler
@@ -2531,14 +2552,14 @@ elif menu == "📈 Raporlar":
                 with col1:
                     st.metric("Kayıp Olan Satır", len(kayip_df))
                 with col2:
-                    toplam_kayip = kayip_df['stok_yoklugu_satis_kaybi'].sum()
+                    toplam_kayip = kayip_df[kayip_kolon].sum()
                     st.metric("Toplam Satış Kaybı", f"{toplam_kayip:,.0f}")
                 with col3:
-                    toplam_ihtiyac = result_df['ihtiyac_miktari'].sum()
+                    toplam_ihtiyac = result_df[ihtiyac_kolon].sum()
                     kayip_oran = (toplam_kayip / toplam_ihtiyac * 100) if toplam_ihtiyac > 0 else 0
                     st.metric("Kayıp Oranı", f"{kayip_oran:.2f}%")
                 with col4:
-                    ortalama_kayip = kayip_df['stok_yoklugu_satis_kaybi'].mean()
+                    ortalama_kayip = kayip_df[kayip_kolon].mean()
                     st.metric("Ortalama Kayıp/Satır", f"{ortalama_kayip:.1f}")
                 
                 st.markdown("---")
@@ -2548,10 +2569,14 @@ elif menu == "📈 Raporlar":
                 
                 # En fazla kayıp olan 20 satır
                 st.write("**En Fazla Kayıp Olan 20 Satır:**")
-                top_kayip = kayip_df.nlargest(20, 'stok_yoklugu_satis_kaybi')[[
+                top_kayip = kayip_df.nlargest(20, kayip_kolon)[[
                     'magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad', 
-                    'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi'
+                    ihtiyac_kolon, sevkiyat_kolon, kayip_kolon
                 ]]
+                
+                # Kolon isimlerini düzelt
+                top_kayip.columns = ['magaza_kod', 'magaza_ad', 'urun_kod', 'urun_ad', 
+                                   'ihtiyac_miktari', 'sevkiyat_miktari', 'stok_yoklugu_satis_kaybi']
                 
                 st.dataframe(
                     top_kayip.style.format({
@@ -2571,7 +2596,7 @@ elif menu == "📈 Raporlar":
                 with col1:
                     st.write("**Ürün Bazında Toplam Kayıp (Top 15):**")
                     urun_kayip = kayip_df.groupby('urun_kod').agg({
-                        'stok_yoklugu_satis_kaybi': 'sum',
+                        kayip_kolon: 'sum',
                         'magaza_kod': 'nunique'
                     }).reset_index()
                     
@@ -2581,7 +2606,7 @@ elif menu == "📈 Raporlar":
                         urun_detay['urun_kod'] = urun_detay['urun_kod'].astype(str)
                         urun_kayip['urun_kod'] = urun_kayip['urun_kod'].astype(str)
                         urun_kayip = urun_kayip.merge(urun_detay, on='urun_kod', how='left')
-                        urun_kayip = urun_kayip[['urun_kod', 'urun_ad', 'stok_yoklugu_satis_kaybi', 'magaza_kod']]
+                        urun_kayip = urun_kayip[['urun_kod', 'urun_ad', kayip_kolon, 'magaza_kod']]
                         urun_kayip.columns = ['Ürün Kodu', 'Ürün Adı', 'Toplam Kayıp', 'Etkilenen Mağaza']
                     else:
                         urun_kayip.columns = ['Ürün Kodu', 'Toplam Kayıp', 'Etkilenen Mağaza']
@@ -2598,7 +2623,7 @@ elif menu == "📈 Raporlar":
                 with col2:
                     st.write("**Mağaza Bazında Toplam Kayıp (Top 15):**")
                     magaza_kayip = kayip_df.groupby('magaza_kod').agg({
-                        'stok_yoklugu_satis_kaybi': 'sum',
+                        kayip_kolon: 'sum',
                         'urun_kod': 'nunique'
                     }).reset_index()
                     
@@ -2608,7 +2633,7 @@ elif menu == "📈 Raporlar":
                         magaza_detay['magaza_kod'] = magaza_detay['magaza_kod'].astype(str)
                         magaza_kayip['magaza_kod'] = magaza_kayip['magaza_kod'].astype(str)
                         magaza_kayip = magaza_kayip.merge(magaza_detay, on='magaza_kod', how='left')
-                        magaza_kayip = magaza_kayip[['magaza_kod', 'magaza_ad', 'stok_yoklugu_satis_kaybi', 'urun_kod']]
+                        magaza_kayip = magaza_kayip[['magaza_kod', 'magaza_ad', kayip_kolon, 'urun_kod']]
                         magaza_kayip.columns = ['Mağaza Kodu', 'Mağaza Adı', 'Toplam Kayıp', 'Etkilenen Ürün']
                     else:
                         magaza_kayip.columns = ['Mağaza Kodu', 'Toplam Kayıp', 'Etkilenen Ürün']
@@ -2632,7 +2657,7 @@ elif menu == "📈 Raporlar":
                 with col1:
                     st.write("**Ürün Segmenti Bazında Kayıp:**")
                     urun_segment_kayip = kayip_df.groupby('urun_segment').agg({
-                        'stok_yoklugu_satis_kaybi': 'sum',
+                        kayip_kolon: 'sum',
                         'magaza_kod': 'nunique'
                     }).reset_index()
                     urun_segment_kayip.columns = ['Ürün Segmenti', 'Toplam Kayıp', 'Etkilenen Mağaza']
@@ -2649,7 +2674,7 @@ elif menu == "📈 Raporlar":
                 with col2:
                     st.write("**Mağaza Segmenti Bazında Kayıp:**")
                     magaza_segment_kayip = kayip_df.groupby('magaza_segment').agg({
-                        'stok_yoklugu_satis_kaybi': 'sum',
+                        kayip_kolon: 'sum',
                         'urun_kod': 'nunique'
                     }).reset_index()
                     magaza_segment_kayip.columns = ['Mağaza Segmenti', 'Toplam Kayıp', 'Etkilenen Ürün']
@@ -2705,6 +2730,8 @@ elif menu == "📈 Raporlar":
                 - Sevkiyat planlaması optimal şekilde çalıştı
                 - Stok dağıtımı dengeli ve verimli
                 """)
+
+
 # ============================================
 # 💾 MASTER DATA OLUŞTURMA
 # ============================================
